@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<link rel="stylesheet" href="site.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <style>
 :root{
@@ -101,7 +102,7 @@ window.dash = (() => {
 })();
 </script>
 </head>
-<body>
+<body data-site-page="dashboard">
 <div id="dash-root">
 <div class="sa-bar"><span id="saInfo">Loading estates.csv…</span><span>Standalone edition · <label for="saPick">load data files</label><input id="saPick" type="file" accept=".csv,.json" multiple hidden></span></div>
 <div class="sa-load" id="saLoad" hidden>
@@ -222,6 +223,8 @@ window.dash = (() => {
     </div>
   </section>
 
+  <div id="enquire"></div>
+
   <section class="grid2" id="charts">
     <div class="card">
       <h2 id="value-chart">Score against price</h2>
@@ -278,6 +281,10 @@ window.dash = (() => {
       <li><b>Before paying anywhere</b> — run an AGIS search (FCT land) or a NAGIS search (Nasarawa land) on the estate's global title file number, confirm the plot sits inside it with your own surveyor, and get the full fee schedule (infrastructure, development levy, survey, legal, agency 5%) in writing.</li>
     </ul>
   </section>
+  <footer class="site-disclaimer">
+    <p>Prices shown are public asking prices, not a valuation or an offer. Titles are what sellers claim and have not been verified. Nothing here is legal, surveying, or investment advice.</p>
+    <p><a href="index.html">Land scan</a> · <a href="studio.html">Plot-to-Home Studio</a> · <a href="privacy.html">Privacy notice</a></p>
+  </footer>
 </div>
 
 <script>
@@ -359,7 +366,16 @@ window.dash = (() => {
   $('.f-reset').addEventListener('click', () => { st.state = ''; stateSel.value = ''; st.corr = ''; st.tier = ''; st.grades.clear(); st.q = ''; $('.q').value = ''; corrSel.value = ''; tierSel.value = '';
     document.querySelectorAll('.ae .chip').forEach((b) => b.setAttribute('aria-pressed', 'false')); resetZoom(); drawAll(); });
   $('.q').addEventListener('input', (e) => { st.q = e.target.value.trim().toLowerCase(); drawAll(); });
-  const select = (id) => { st.sel = id; drawAll(); };
+  let lastScorecard = null;
+  function noteScorecard(id) {
+    if (!id || id === lastScorecard) return;
+    if (!window.siteSetEstate && !window.siteTrack) return;
+    lastScorecard = id;
+    const name = byId[id] ? byId[id].name : "";
+    if (window.siteSetEstate) window.siteSetEstate(name);
+    if (window.siteTrack) window.siteTrack("Scorecard view", { estate: name });
+  }
+  const select = (id) => { st.sel = id; drawAll(); noteScorecard(id); };
 
   // legend
   const gleg = $('.gleg');
@@ -460,8 +476,20 @@ window.dash = (() => {
     if (r.price_stale) det.append(el('div', 'flag', '⏱ Price is older than 9 months or undated, so its price score is capped at 50.'));
     if (r.state !== 'FCT') det.append(el('div', 'flag', r.state === 'Nasarawa' ? 'ⓘ Nasarawa State land: the title runs through NAGIS (Nasarawa Geographic Information Service), not FCDA/AGIS.' : 'ⓘ Listings don’t say whether this is the FCT or the Nasarawa side; confirm with AGIS and NAGIS.'));
     if (e.flags) det.append(el('div', 'flag', '⚠ ' + e.flags));
-    const src = el('p', 'note'); const a = el('a', null, e.source); a.href = e.source_url; a.target = '_blank'; a.rel = 'noopener';
-    src.append('Source: ', a, e.source_date ? ' (' + e.source_date + ')' : ' (undated)'); det.append(src);
+    const src = el('p', 'note');
+    const href = window.sitePublicSourceUrl ? window.sitePublicSourceUrl(e.source_url) : "";
+    if (href) {
+      const a = el('a', null, e.source || "Listing");
+      a.href = href; a.target = "_blank"; a.rel = "noopener noreferrer";
+      src.append("Source: ", a);
+    } else src.append("Source: " + (e.source || "Listing"));
+    src.append(e.source_date ? " (" + e.source_date + ")" : " (undated)");
+    det.append(src);
+    const ask = el("p", "note");
+    const askA = el("a", null, "Ask about this estate");
+    askA.href = "#enquire";
+    ask.append(askA);
+    det.append(ask);
   }
 
   // ---------- scatter ----------
@@ -574,6 +602,7 @@ window.dash = (() => {
     if (l.status === 'error') fail(mapbox);
     if (c.status === 'error') fail(cbBox);
     if (rows.length) drawAll();
+    if (st.sel) noteScorecard(st.sel);
     if (mk.status === 'ok') drawMarket(mk.data); else if (mk.status === 'error') fail(mkBox);
   });
 
@@ -599,5 +628,7 @@ window.dash = (() => {
   window.dash.loadFromUrls().then((ok) => { if (!ok) { box.hidden = false; info.textContent = 'Data not loaded'; } });
 })();
 </script>
+<script src="site-config.js"></script>
+<script src="site.js"></script>
 </body>
 </html>

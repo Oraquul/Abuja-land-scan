@@ -26,3 +26,50 @@ Grades: A ≥ 68, B ≥ 60, C ≥ 50, D below 50.
 ## Important
 
 This is a screening tool, not advice. Titles are as claimed by sellers and have **not** been verified at AGIS or NAGIS. Coordinates are approximate to area level. Do your own title search and site visit before you pay anything.
+
+The same disclaimer, plus an NDPA 2023 privacy notice, is on [privacy.html](privacy.html). Prices on the site are public asking prices.
+
+## Enquiries, WhatsApp and analytics
+
+Visitors can send an enquiry from the land scan and from the studio summary, and can open a WhatsApp chat that names the estate on screen. Edit **`site-config.js`** only. The enquiry form stays off while `FORM_ENDPOINT` is still the placeholder. The WhatsApp button uses the number already set there (`2347068124363`, which is +234 706 812 4363). Do not put visitor messages or client names in the repository. The site is public, and the form does not save submissions here.
+
+| Config value | Replace the placeholder with | Left as a placeholder |
+|---|---|---|
+| `FORM_ENDPOINT` | Formspree `https://formspree.io/f/yourFormId`, or Web3Forms `https://api.web3forms.com/submit` | Enquiry form accepts nothing |
+| `WEB3FORMS_ACCESS_KEY` | The Web3Forms access key, only if the endpoint is Web3Forms | Required for Web3Forms; ignored for Formspree |
+| `WHATSAPP_NUMBER` | Country code and digits only, no plus sign, in the shape `2348XXXXXXXXX` | WhatsApp button is hidden |
+| `ANALYTICS_PROVIDER` | `goatcounter` or `plausible` | No analytics script is loaded |
+| `GOATCOUNTER_HOST` | Your GoatCounter host, such as `abujaland.goatcounter.com` | GoatCounter stays off |
+| `PLAUSIBLE_DOMAIN` | The domain you added in Plausible, such as `username.github.io` | Plausible stays off |
+
+A value still containing `YOUR_` is treated as unset.
+
+### Formspree
+
+1. Create a form at [formspree.io](https://formspree.io).
+2. Copy the endpoint (`https://formspree.io/f/xxxxxxxx`) into `FORM_ENDPOINT`.
+3. Leave `WEB3FORMS_ACCESS_KEY` as the placeholder.
+4. The form posts `name`, `phone`, `email`, `estate`, `budget`, `buyer_type` and `consent`. In the Formspree dashboard, allow AJAX submissions. The form id will be visible in the page source; that is normal for a static site. Restrict the form to your GitHub Pages domain if Formspree offers that setting.
+
+### Web3Forms
+
+1. Create an access key at [web3forms.com](https://web3forms.com).
+2. Set `FORM_ENDPOINT` to `https://api.web3forms.com/submit`.
+3. Set `WEB3FORMS_ACCESS_KEY` to that key. It is a public frontend key, not a server secret. Limit it to your domain in the Web3Forms dashboard.
+
+Google Forms cannot be posted to directly from this site (the browser blocks the cross-origin request). Use Formspree or Web3Forms, including a form that forwards mail to you.
+
+### WhatsApp
+
+`WHATSAPP_NUMBER` is `2347068124363` (+234 706 812 4363), digits only, which is the `wa.me` form. The button stays hidden if that value is put back to a `YOUR_` placeholder or is not 8 to 15 digits. The draft message names the estate scorecard on the land scan, or the estate field in the studio. It does not include the visitor’s name, phone, or email.
+
+### Analytics
+
+Leave `ANALYTICS_PROVIDER` as `""` to load nothing. GoatCounter and Plausible are cookieless, advertising-free counters.
+
+- GoatCounter: create a site, then set `ANALYTICS_PROVIDER` to `goatcounter` and `GOATCOUNTER_HOST` to the host in your GoatCounter code (the part before `/count`).
+- Plausible: add the GitHub Pages domain, then set `ANALYTICS_PROVIDER` to `plausible` and `PLAUSIBLE_DOMAIN` to that domain.
+
+When analytics are on, the site records a page view plus three events: **Form submit**, **WhatsApp click**, and **Scorecard view**. The scorecard event includes the estate name only. Form contents, phone numbers, and email addresses are not sent.
+
+Do not commit enquiry exports, screenshots of submissions, or Plot-to-Home backups. Studio sessions stay in the browser that created them.
