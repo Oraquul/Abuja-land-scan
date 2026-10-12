@@ -1,5 +1,14 @@
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const site = require("../site.js");
+
+const window = {};
+eval(fs.readFileSync(path.join(__dirname, "../site-config.js"), "utf8"));
+const live = site.normalizeConfig(window.SITE_CONFIG);
+assert.strictEqual(live.formEndpoint, "https://formspree.io/f/mvkzbdqq");
+assert.strictEqual(live.formReady, true);
+assert.strictEqual(live.web3forms, false);
 
 const placeholders = site.normalizeConfig({
   FORM_ENDPOINT: "https://formspree.io/f/YOUR_FORM_ID",
