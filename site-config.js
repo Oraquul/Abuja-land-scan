@@ -13,7 +13,7 @@ window.SITE_CONFIG = {
   // Lead form POST address.
   // Formspree: "https://formspree.io/f/xxxxxxxx"
   // Web3Forms: "https://api.web3forms.com/submit" (also set WEB3FORMS_ACCESS_KEY)
-  FORM_ENDPOINT: "https://formspree.io/f/YOUR_FORM_ID",
+  FORM_ENDPOINT: "https://formspree.io/f/mvkzbdqq",
 
   // Web3Forms access key. Leave the placeholder when using Formspree.
   // This key is visible to anyone who can load the site. Restrict it to your

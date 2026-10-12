@@ -31,11 +31,11 @@ The same disclaimer, plus an NDPA 2023 privacy notice, is on [privacy.html](priv
 
 ## Enquiries, WhatsApp and analytics
 
-Visitors can send an enquiry from the land scan and from the studio summary, and can open a WhatsApp chat that names the estate on screen. Edit **`site-config.js`** only. The enquiry form stays off while `FORM_ENDPOINT` is still the placeholder. The WhatsApp button uses the number already set there (`2347068124363`, which is +234 706 812 4363). Do not put visitor messages or client names in the repository. The site is public, and the form does not save submissions here.
+Visitors can send an enquiry from the land scan and from the studio summary, and can open a WhatsApp chat that names the estate on screen. Edit **`site-config.js`** only. The enquiry form posts JSON to Formspree at `https://formspree.io/f/mvkzbdqq`. The WhatsApp button uses `2347068124363` (+234 706 812 4363). Do not put visitor messages or client names in the repository. The site is public, and the form does not save submissions here.
 
 | Config value | Replace the placeholder with | Left as a placeholder |
 |---|---|---|
-| `FORM_ENDPOINT` | Formspree `https://formspree.io/f/yourFormId`, or Web3Forms `https://api.web3forms.com/submit` | Enquiry form accepts nothing |
+| `FORM_ENDPOINT` | Set to `https://formspree.io/f/mvkzbdqq`. A Web3Forms URL also works if you switch. | Enquiry form accepts nothing |
 | `WEB3FORMS_ACCESS_KEY` | The Web3Forms access key, only if the endpoint is Web3Forms | Required for Web3Forms; ignored for Formspree |
 | `WHATSAPP_NUMBER` | Country code and digits only, no plus sign, in the shape `2348XXXXXXXXX` | WhatsApp button is hidden |
 | `ANALYTICS_PROVIDER` | `goatcounter` or `plausible` | No analytics script is loaded |
@@ -46,10 +46,7 @@ A value still containing `YOUR_` is treated as unset.
 
 ### Formspree
 
-1. Create a form at [formspree.io](https://formspree.io).
-2. Copy the endpoint (`https://formspree.io/f/xxxxxxxx`) into `FORM_ENDPOINT`.
-3. Leave `WEB3FORMS_ACCESS_KEY` as the placeholder.
-4. The form posts `name`, `phone`, `email`, `estate`, `budget`, `buyer_type` and `consent`. In the Formspree dashboard, allow AJAX submissions. The form id will be visible in the page source; that is normal for a static site. Restrict the form to your GitHub Pages domain if Formspree offers that setting.
+`FORM_ENDPOINT` is `https://formspree.io/f/mvkzbdqq`. Leave `WEB3FORMS_ACCESS_KEY` as the placeholder. The form posts JSON (`Accept: application/json`) with `name`, `phone`, `email`, `estate`, `budget`, `buyer_type` and `consent`. The form id is visible in the page source; that is normal for a static site. In the Formspree dashboard, allow AJAX submissions and restrict the form to your GitHub Pages domain if that setting is available.
 
 ### Web3Forms
 
