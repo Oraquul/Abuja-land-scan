@@ -1,0 +1,167 @@
+/* Shared enquiry form, WhatsApp button and disclaimer. Uses each page's colours. */
+#enquire { scroll-margin-top: 12px; }
+#enquire:empty { display: none; }
+.site-lead {
+  background: var(--color-panel, var(--sheet));
+  color: var(--color-fg, var(--ink));
+  border: 1px solid var(--color-border-line, var(--rule));
+  border-radius: var(--cds-radius, 6px);
+  padding: var(--cds-pad-lg, 16px);
+  margin-top: 16px;
+  min-width: 0;
+}
+.site-lead h2 {
+  font-size: var(--cds-font-size-heading, 1.15rem);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.site-lead .site-intro,
+.site-fine,
+.site-status {
+  color: var(--color-fg-muted, var(--ink-2));
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+}
+.site-form { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 12px;
+}
+.site-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-fg-muted, var(--ink-2));
+}
+.site-form input,
+.site-form select,
+.ae .site-form input,
+.ae .site-form select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--color-fg, var(--ink));
+  background: var(--color-bg, var(--paper));
+  border: 1px solid var(--color-border-line, var(--rule));
+  border-radius: var(--cds-radius, 6px);
+  padding: 8px 10px;
+  width: 100%;
+  min-width: 0;
+}
+.site-form input:focus-visible,
+.site-form select:focus-visible,
+.site-form button:focus-visible,
+.site-wa:focus-visible,
+.site-disclaimer a:focus-visible {
+  outline: 2px solid var(--color-ok, var(--sun));
+  outline-offset: 2px;
+}
+.site-form .site-tried input:user-invalid,
+.site-form .site-tried select:user-invalid {
+  border-color: var(--color-bad, var(--warn));
+}
+.site-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-fg, var(--ink));
+}
+.site-check input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 2px;
+  flex: none;
+}
+.site-check label { font-size: 14px; color: inherit; }
+.site-submit,
+.ae .site-submit {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-bg, var(--sheet));
+  background: var(--color-fg, var(--granite));
+  border: 1px solid var(--color-fg, var(--granite));
+  border-radius: var(--cds-radius, 6px);
+  padding: 10px 16px;
+  align-self: flex-start;
+}
+.site-submit:disabled { opacity: 0.65; cursor: progress; }
+.site-status:empty { display: none; margin: 0; }
+.site-status[data-state="ok"] { color: var(--color-ok, var(--leaf)); }
+.site-status[data-state="err"] { color: var(--color-bad, var(--warn)); }
+.site-hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.site-disclaimer {
+  margin-top: 20px;
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--color-border-line, var(--rule));
+  color: var(--color-fg-muted, var(--ink-2));
+  font-size: 13px;
+  line-height: 1.5;
+}
+.site-disclaimer p { margin: 0 0 8px; }
+.site-disclaimer a { color: inherit; }
+.app + .site-disclaimer,
+body > .site-disclaimer {
+  padding-left: clamp(16px, 3vw, 32px);
+  padding-right: clamp(16px, 3vw, 32px);
+  max-width: 1280px;
+}
+html[data-wa="on"] .site-disclaimer {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+.site-wa {
+  position: fixed;
+  z-index: 40;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  background: #1f7a4d;
+  color: #fff;
+  text-decoration: none;
+  font: 600 14px/1 var(--font-anthropic-sans, var(--f-body, system-ui, sans-serif));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.site-wa svg { display: block; flex: none; }
+.site-wa-label { white-space: nowrap; }
+@media (max-width: 640px) {
+  .site-wa {
+    width: 52px;
+    height: 52px;
+    min-height: 0;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .site-wa-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-wa { transition: none; }
+}
