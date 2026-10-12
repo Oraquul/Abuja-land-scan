@@ -31,7 +31,7 @@ The same disclaimer, plus an NDPA 2023 privacy notice, is on [privacy.html](priv
 
 ## Enquiries, WhatsApp and analytics
 
-Visitors can send an enquiry from the land scan and from the studio summary, and can open a WhatsApp chat that names the estate on screen. Both are off until you edit **`site-config.js`**. That is the only file to change. Do not put visitor messages, client names, or phone numbers in the repository. The site is public, and the form does not save submissions here.
+Visitors can send an enquiry from the land scan and from the studio summary, and can open a WhatsApp chat that names the estate on screen. Edit **`site-config.js`** only. The enquiry form stays off while `FORM_ENDPOINT` is still the placeholder. The WhatsApp button uses the number already set there (`2347068124363`, which is +234 706 812 4363). Do not put visitor messages or client names in the repository. The site is public, and the form does not save submissions here.
 
 | Config value | Replace the placeholder with | Left as a placeholder |
 |---|---|---|
@@ -61,7 +61,7 @@ Google Forms cannot be posted to directly from this site (the browser blocks the
 
 ### WhatsApp
 
-Put the chat number in `WHATSAPP_NUMBER` as digits only. The button stays hidden until that value is 8 to 15 digits. The draft message names the estate scorecard on the land scan, or the estate field in the studio. It does not include the visitor’s name, phone, or email.
+`WHATSAPP_NUMBER` is `2347068124363` (+234 706 812 4363), digits only, which is the `wa.me` form. The button stays hidden if that value is put back to a `YOUR_` placeholder or is not 8 to 15 digits. The draft message names the estate scorecard on the land scan, or the estate field in the studio. It does not include the visitor’s name, phone, or email.
 
 ### Analytics
 

@@ -5,7 +5,8 @@
  * still a placeholder (or, for analytics, while ANALYTICS_PROVIDER is "").
  *
  * This repository is public. Do not put visitor submissions, client names,
- * phone numbers, or private notes in this file or anywhere else in the repo.
+ * or private notes in this file or anywhere else in the repo.
+ * WHATSAPP_NUMBER is the public click-to-chat line and is meant to be here.
  * Enquiry messages are sent only to FORM_ENDPOINT. They are not written here.
  * ========================================================================== */
 window.SITE_CONFIG = {
@@ -20,8 +21,8 @@ window.SITE_CONFIG = {
   WEB3FORMS_ACCESS_KEY: "YOUR_WEB3FORMS_ACCESS_KEY",
 
   // WhatsApp click-to-chat number: country code and digits only, no plus sign.
-  // Shape: "2348XXXXXXXXX". Do not put a real person's number in this public file.
-  WHATSAPP_NUMBER: "YOUR_NUMBER",
+  // +234 706 812 4363 → wa.me/2347068124363
+  WHATSAPP_NUMBER: "2347068124363",
 
   // Privacy-friendly analytics. "" leaves analytics off (no script is loaded).
   // Use "goatcounter" or "plausible".
