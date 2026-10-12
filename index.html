@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Abuja Estate Land Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root{
+  --color-bg:#f6f7f5; --color-panel:#ffffff; --color-fg:#1b2421; --color-fg-muted:#5b6863; --color-border-line:#dde3e0;
+  --color-ok:#1f7a4d; --color-warn:#9a6a00; --color-bad:#b23b2b;
+  --cds-chart-grid:#e8ece9; --cds-chart-axis:#b9c2be; --cds-chart-muted:#c4ccc8; --cds-chart-reference:#8a948f;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.12);
+  --font-anthropic-sans:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-anthropic-serif:"Source Serif 4", Georgia, serif;
+  --cds-radius:8px; --cds-pad-xs:4px; --cds-pad-sm:8px; --cds-pad-md:12px; --cds-pad-lg:16px; --cds-pad-xl:24px;
+  --cds-gap-xs:4px; --cds-gap-sm:8px; --cds-gap-md:12px; --cds-gap-lg:20px; --cds-gap-xl:28px;
+  --cds-font-size-caption:12px; --cds-font-size-body:14px; --cds-font-size-heading:16px; --cds-font-size-title:28px;
+  --cds-font-weight-medium:600; --cds-dur-slow:.3s;
+  --cds-surface-popover:var(--color-panel); --cds-border:var(--color-border-line); --cds-text-secondary:var(--color-fg-muted);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --color-bg:#151918; --color-panel:#1d2321; --color-fg:#e4ebe8; --color-fg-muted:#9aa8a3; --color-border-line:#2f3835;
+  --color-ok:#6cc596; --color-warn:#e2b443; --color-bad:#ef8a78;
+  --cds-chart-grid:#2a3230; --cds-chart-axis:#4a5551; --cds-chart-muted:#46504c; --cds-chart-reference:#7d8984;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --color-bg:#151918; --color-panel:#1d2321; --color-fg:#e4ebe8; --color-fg-muted:#9aa8a3; --color-border-line:#2f3835;
+  --color-ok:#6cc596; --color-warn:#e2b443; --color-bad:#ef8a78;
+  --cds-chart-grid:#2a3230; --cds-chart-axis:#4a5551; --cds-chart-muted:#46504c; --cds-chart-reference:#7d8984;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.5); color-scheme:dark}
+html,body{margin:0}
+body{background:var(--color-bg);color:var(--color-fg);font-family:var(--font-anthropic-sans);font-size:14px;line-height:1.45}
+*{box-sizing:border-box}
+#dash-root{max-width:1280px;margin:0 auto;padding:20px clamp(16px,3vw,32px) 40px}
+.dash-skeleton{color:transparent!important;background:var(--cds-chart-grid);border-radius:6px;min-height:1em}
+.sa-bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;font-size:12px;color:var(--color-fg-muted);margin-bottom:12px}
+.sa-bar label{cursor:pointer;text-decoration:underline}
+.sa-load{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:8px;padding:16px;margin-bottom:16px}
+.sa-load[hidden]{display:none}
+[hidden]{display:none!important}
+</style>
+<script>
+/* Standalone data runtime: reads estates.csv, map_layers.min.json and area_market.min.json
+   from this folder (or files picked by the viewer) and serves them to the page in the same
+   shape the claude.ai dashboard uses. */
+window.dash = (() => {
+  const raw = {}; const calcs = {}; const subs = []; let state = 'loading'; let message = '';
+  const NUM = ['lat','lng','ref_sqm','ref_price','price_per_sqm','title_score','infra_score','drive_min','transparency'];
+  function typeEstates(rows) {
+    return rows.filter((r) => r.id).map((r) => {
+      const o = { ...r };
+      for (const k of NUM) o[k] = (r[k] === undefined || String(r[k]).trim() === '') ? null : Number(r[k]);
+      if (o.price_per_sqm == null && o.ref_price && o.ref_sqm) o.price_per_sqm = Math.round(o.ref_price / o.ref_sqm);
+      o.price_stale = /^true$/i.test(String(r.price_stale || '').trim());
+      return o;
+    });
+  }
+  function reset() { for (const c of Object.values(calcs)) c.cache = undefined; }
+  function data(id) {
+    if (raw[id]) return { status: 'ok', data: raw[id], columns: raw[id].columns || Object.keys(raw[id][0] || {}), refreshing: false, meta: [] };
+    const c = calcs[id];
+    if (c) {
+      const ins = c.inputs.map(data);
+      const bad = ins.find((x) => x.status !== 'ok');
+      if (bad) return { status: bad.status, data: [], message: bad.message };
+      if (c.cache === undefined) c.cache = c.fn(...ins.map((x) => x.data));
+      return { status: 'ok', data: c.cache, refreshing: false, meta: [] };
+    }
+    return { status: state === 'error' ? 'error' : 'loading', data: [], message };
+  }
+  function run() { for (const fn of subs) { try { fn(); } catch (e) { console.error(e); } } }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (state === 'ok') run(); }, 150); });
+  async function loadFromUrls() {
+    try {
+      const [csv, layers, market] = await Promise.all([
+        fetch('estates.csv', { cache: 'no-store' }).then((r) => { if (!r.ok) throw new Error('estates.csv ' + r.status); return r.text(); }),
+        fetch('map_layers.min.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch('area_market.min.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).catch(() => []),
+      ]);
+      setData(csv, layers, market); return true;
+    } catch (e) { state = 'error'; message = String(e.message || e); run(); return false; }
+  }
+  function setData(csvText, layers, market) {
+    const rows = typeEstates(d3.csvParse(csvText.replace(/^﻿/, '')));
+    raw.estates = rows; raw.map_layers = layers || []; raw.area_market = market || [];
+    state = 'ok'; reset(); run();
+    document.dispatchEvent(new CustomEvent('sa-loaded', { detail: { count: rows.length } }));
+  }
+  return {
+    data, setData, loadFromUrls,
+    calc(id, def) { calcs[id] = { inputs: def.inputs, fn: def.fn, cache: undefined }; },
+    loader() {},
+    onData(fn) { subs.push(fn); try { fn(); } catch (e) { console.error(e); } },
+    colors: ['#2f6f8f', '#c27c2c', '#4f8a5b', '#8a5aa6', '#b23b2b', '#3f8f8a', '#9a6a00', '#5b6863'],
+    refresh() { loadFromUrls(); }, params() { return {}; }, setParams() {}, resetParams() {}, setLink() {},
+  };
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<div class="sa-bar"><span id="saInfo">Loading estates.csv…</span><span>Standalone edition · <label for="saPick">load data files</label><input id="saPick" type="file" accept=".csv,.json" multiple hidden></span></div>
+<div class="sa-load" id="saLoad" hidden>
+  <b>The data files couldn't be read automatically.</b>
+  <p style="margin:6px 0 10px">This happens when the page is opened straight from your computer or Drive instead of a web host. Pick <code>estates.csv</code> (and optionally <code>map_layers.min.json</code> and <code>area_market.min.json</code>) to load them.</p>
+  <label for="saPick" style="text-decoration:underline;cursor:pointer">Choose files</label>
+</div>
+<style>
+.ae{font-family:var(--font-anthropic-sans);color:var(--color-fg);display:flex;flex-direction:column;gap:var(--cds-gap-lg)}
+.ae h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0}
+.ae h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.ae .sub{color:var(--color-fg-muted);font-size:var(--cds-font-size-body);margin:var(--cds-gap-xs) 0 0}
+.ae .note{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption);margin:2px 0 var(--cds-gap-sm)}
+.ae .card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);min-width:0}
+.ae .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:var(--cds-gap-md)}
+.ae .kpi .lab{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.ae .kpi .val{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums;margin-top:var(--cds-gap-xs)}
+.ae .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.ae .mapgrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(min(100%,18rem),1fr);gap:var(--cds-gap-md)}
+@media (max-width:760px){.ae .mapgrid{grid-template-columns:1fr}}
+.ae .bar{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}
+.ae select,.ae input[type=search],.ae button{font:inherit;font-size:var(--cds-font-size-caption);color:var(--color-fg);background:var(--color-bg);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-xs) var(--cds-pad-sm)}
+.ae button{cursor:pointer}
+.ae .chip[aria-pressed=true]{background:var(--color-fg);color:var(--color-bg)}
+.ae .mapbox{position:relative;min-height:380px;touch-action:none}
+.ae .mapbox svg{display:block;cursor:grab}
+.ae .road{fill:none;stroke:var(--cds-chart-grid);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.ae .border{fill:none;stroke:var(--color-fg-muted);stroke-width:1.5;stroke-dasharray:6 4}
+.ae .borderlab{fill:var(--color-fg-muted);font-size:10px;font-style:italic}
+.ae .roadlab{fill:var(--color-fg-muted);font-size:10px}
+.ae .place{fill:var(--color-fg);font-size:11px;font-weight:500;paint-order:stroke;stroke:var(--color-panel);stroke-width:3px}
+.ae .placedot{fill:var(--color-fg-muted)}
+.ae .pin{cursor:pointer;stroke:var(--color-panel)}
+.ae .pin.sel{stroke:var(--color-fg)}
+.ae .tip{position:absolute;pointer-events:none;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);max-width:240px;display:none;z-index:2}
+.ae .tip .t2{color:var(--cds-text-secondary)}
+.ae .legend{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-top:var(--cds-gap-sm)}
+.ae .sw{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:4px;vertical-align:middle}
+.ae .zoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px}
+.ae .det h3{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.ae .det .meta{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-top:2px}
+.ae .det .big{display:flex;align-items:baseline;gap:var(--cds-gap-sm);margin:var(--cds-gap-md) 0}
+.ae .det .score{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums}
+.ae .badge{display:inline-block;border-radius:999px;padding:1px 8px;font-size:var(--cds-font-size-caption);color:#fff;font-weight:500}
+.ae .facts{display:grid;grid-template-columns:auto 1fr;gap:4px var(--cds-gap-md);font-size:var(--cds-font-size-caption);margin:var(--cds-gap-sm) 0}
+.ae .facts dt{color:var(--color-fg-muted)}
+.ae .facts dd{margin:0;font-variant-numeric:tabular-nums}
+.ae .comp{display:grid;grid-template-columns:7.5rem 1fr 2rem;align-items:center;gap:6px;font-size:var(--cds-font-size-caption);margin:4px 0}
+.ae .track{height:8px;border-radius:4px;background:var(--cds-chart-grid);overflow:hidden}
+.ae .fill{height:100%;border-radius:4px}
+.ae .flag{margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-warn)}
+.ae .det a{font-size:var(--cds-font-size-caption);color:var(--color-fg)}
+.ae .tblwrap{max-height:520px;overflow:auto}
+.ae table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
+.ae th{position:sticky;top:0;background:var(--color-panel);text-align:left;font-weight:var(--cds-font-weight-medium);padding:6px;border-bottom:1px solid var(--color-border-line);cursor:pointer;white-space:nowrap}
+.ae td{padding:6px;border-bottom:1px solid var(--color-border-line)}
+.ae td.num,.ae th.num{text-align:right}
+.ae tbody tr{cursor:pointer}
+.ae tbody tr:hover{background:var(--color-bg)}
+.ae tbody tr.sel{outline:2px solid var(--color-fg);outline-offset:-2px}
+@media (max-width:640px){.ae .hide-n{display:none}}
+.ae .method{font-size:var(--cds-font-size-body);line-height:1.5}
+.ae .method li{margin:4px 0}
+.ae .chartbox{position:relative;min-height:300px}
+[data-dash-source-state=empty]{color:transparent}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+.ae .fail{display:flex;align-items:center;justify-content:center;gap:6px;min-height:inherit;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.ae .fail::before{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+</style>
+
+<div class="ae">
+  <header id="top">
+    <h1>Abuja estate land scan — value for money</h1>
+    <p class="sub dash-skeleton" id="takeaway" data-source="kpis" data-field="takeaway">—</p>
+  </header>
+
+  <section class="kpis" id="headline">
+    <div class="card kpi"><div class="lab">Estates with a published price</div><div class="val dash-skeleton" data-source="kpis" data-field="rated">—</div></div>
+    <div class="card kpi"><div class="lab">Median land price, ₦ per sqm</div><div class="val dash-skeleton" data-source="kpis" data-field="median_psqm">—</div></div>
+    <div class="card kpi"><div class="lab">With an FCDA-backed title claimed</div><div class="val dash-skeleton" data-source="kpis" data-field="strong_title">—</div></div>
+    <div class="card kpi"><div class="lab">In Nasarawa or on the border</div><div class="val dash-skeleton" data-source="kpis" data-field="border_count">—</div></div>
+    <div class="card kpi"><div class="lab">Grade A (score 68+)</div><div class="val dash-skeleton" data-source="kpis" data-field="grade_a">—</div></div>
+  </section>
+
+  <section class="card" id="filters">
+    <div class="bar">
+      <select class="f-state" aria-label="State"><option value="">FCT + Nasarawa</option><option>FCT</option><option>Nasarawa</option><option>Border (unclear)</option></select>
+      <select class="f-corr" aria-label="Corridor"></select>
+      <select class="f-tier" aria-label="Price tier">
+        <option value="">All price tiers</option>
+        <option>Entry (under ₦10M)</option><option>Value (₦10–25M)</option><option>Mid (₦25–50M)</option><option>Upper (₦50–100M)</option><option>Premium (₦100M+)</option>
+      </select>
+      <span class="note" style="margin:0">Grade:</span>
+      <button class="chip" data-g="A" aria-pressed="false">A</button>
+      <button class="chip" data-g="B" aria-pressed="false">B</button>
+      <button class="chip" data-g="C" aria-pressed="false">C</button>
+      <button class="chip" data-g="D" aria-pressed="false">D</button>
+      <button class="chip" data-g="Not rated" aria-pressed="false">Not rated</button>
+      <button class="f-reset">Reset</button>
+      <span class="note f-count" style="margin:0"></span>
+    </div>
+  </section>
+
+  <section class="mapgrid" id="map-section">
+    <div class="card">
+      <h2 id="map">Where the estates are</h2>
+      <p class="note">Pins are placed at area level (±1–3 km), not plot boundaries. The dashed line is an approximate FCT–Nasarawa border. Click a pin for its scorecard; drag to pan, scroll or use +/− to zoom.</p>
+      <div class="mapbox" data-source="scored estates map_layers">
+        <div class="zoom"><button class="z-in" aria-label="Zoom in">+</button><button class="z-out" aria-label="Zoom out">−</button></div>
+        <div class="tip"></div>
+      </div>
+      <div class="legend gleg"></div>
+    </div>
+    <div class="card det" id="scorecard">
+      <h2>Estate scorecard</h2>
+      <p class="note">Click a pin, a dot or a table row.</p>
+      <div class="det-body"></div>
+    </div>
+  </section>
+
+  <section class="grid2" id="charts">
+    <div class="card">
+      <h2 id="value-chart">Score against price</h2>
+      <p class="note">Up and to the left is better value: a higher score for less per sqm. Price axis is logarithmic.</p>
+      <div class="chartbox sc" data-source="scored"><div class="tip"></div></div>
+    </div>
+    <div class="card">
+      <h2 id="corridors">Corridors compared</h2>
+      <p class="note">Median land price per sqm among priced estates; label shows average score and estate count.</p>
+      <div class="chartbox cb" data-source="by_corridor"></div>
+    </div>
+  </section>
+
+  <section class="card" id="ranking">
+    <h2>All estates, ranked</h2>
+    <p class="note">Reference plot = the plot size used for comparison (usually 450–500 sqm, the detached-duplex size). Click a header to sort.</p>
+    <div class="bar" style="margin-bottom:var(--cds-gap-sm)"><input type="search" class="q" placeholder="Search estate, developer, corridor" aria-label="Search"></div>
+    <div class="tblwrap">
+      <table class="tbl" data-source="scored" data-row-key="id">
+        <thead><tr>
+          <th data-field="name" data-k="name">Estate</th>
+          <th data-field="corridor" data-k="corridor" class="hide-n">Corridor</th>
+          <th data-field="state" data-k="state" class="hide-n">State</th>
+          <th data-field="tier" data-k="tier" class="hide-n">Tier</th>
+          <th data-field="ref_sqm" data-k="ref_sqm" class="num hide-n">Ref. plot</th>
+          <th data-field="ref_price" data-k="ref_price" class="num">Ref. price</th>
+          <th data-field="price_per_sqm" data-k="price_per_sqm" class="num">₦/sqm</th>
+          <th data-field="title" data-k="title" class="hide-n">Title claimed</th>
+          <th data-field="score" data-k="score" class="num" aria-sort="descending">Score</th>
+          <th data-field="grade" data-k="grade">Grade</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="market">
+    <h2>How much land is on offer, by area</h2>
+    <p class="note">All land listings on Nigeria Property Centre per area (estate and non-estate), with the portal's average asking price. Averages are pulled up by hectare-sized parcels, so read them as market activity, not plot prices.</p>
+    <div class="chartbox mk" data-source="area_market"></div>
+  </section>
+
+  <section class="card method" id="method">
+    <h2>How the scores work</h2>
+    <ul>
+      <li><b>Price (25%)</b> — half how cheap the estate is per sqm against the median of its own corridor, half how cheap it is across Abuja overall (log scale, ₦5,000/sqm = 100, ₦300,000/sqm = 0). Where a developer charges infrastructure or development fees on top, they are added in.</li>
+      <li><b>Title (25%)</b> — the title the seller claims: FCDA C of O with approved plan 95, FCDA C of O 90, Governor's consent or FCDA allocation with building plan 85, R of O 75, C of O with issuer unclear 65–70, area-council/customary 45, none stated 25. None of these were verified at AGIS.</li>
+      <li><b>Infrastructure (25%)</b> — how ready the estate is for you to build within 1–3 years: residents already living there, tarred roads, fence, power and water score high; advertised future amenities score low.</li>
+      <li><b>Access (15%)</b> — approximate off-peak drive to the Central Area; 10 minutes scores 100, each extra minute costs 1.3 points.</li>
+      <li><b>Stale prices</b> — where the price is undated or more than nine months old, the price score is capped at 50, because today's price is unknown.</li>
+      <li><b>Nasarawa titles</b> — a NAGIS (Nasarawa) C of O scores like an FCDA C of O with a building plan (85); a global R of O with a deed of assignment scores 70; a deed and survey alone score 35.</li>
+      <li><b>Price transparency (10%)</b> — recent, consistent prices with no hidden fees score high; expired promos, undated lists and agents quoting different prices score low.</li>
+      <li><b>Grades</b> — A 68+, B 60–67, C 50–59, D under 50. Estates with no current published price are mapped but not rated.</li>
+      <li><b>Before paying anywhere</b> — run an AGIS search (FCT land) or a NAGIS search (Nasarawa land) on the estate's global title file number, confirm the plot sits inside it with your own surveyor, and get the full fee schedule (infrastructure, development levy, survey, legal, agency 5%) in writing.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(() => {
+  dash.calc('scored', {
+    inputs: ['estates'],
+    title: 'Value-for-money scores',
+    description: 'Each estate scored 0–100 for building within 1–3 years: price 25%, title 25%, infrastructure 25%, access 15%, price transparency 10%.',
+    fn: (estates) => {
+      const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      const median = (a) => { const s = a.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+      const clamp = (v) => Math.max(0, Math.min(100, v));
+      const med = {};
+      for (const r of estates) { const p = num(r.price_per_sqm); if (p) (med[r.corridor] = med[r.corridor] || []).push(p); }
+      for (const k in med) med[k] = median(med[k]);
+      const tiers = [[10e6,'Entry (under ₦10M)'],[25e6,'Value (₦10–25M)'],[50e6,'Mid (₦25–50M)'],[100e6,'Upper (₦50–100M)'],[Infinity,'Premium (₦100M+)']];
+      return estates.map((r) => {
+        const p = num(r.price_per_sqm), price = num(r.ref_price);
+        const access = clamp(100 - (num(r.drive_min) - 10) * 1.3);
+        const base = { id: r.id, name: r.name, corridor: r.corridor, state: r.state, ref_sqm: num(r.ref_sqm), ref_price: price, price_per_sqm: p, title: r.title, title_score: num(r.title_score), infra_score: num(r.infra_score), access_score: Math.round(access), transparency: num(r.transparency), price_stale: r.price_stale === true || r.price_stale === 'true' };
+        if (!p) return { ...base, price_score: null, score: null, grade: 'Not rated', tier: 'No price' };
+        const rel = clamp(100 - (p / med[r.corridor] - 0.5) * 100);
+        const abs = clamp(100 * (Math.log(300000) - Math.log(p)) / (Math.log(300000) - Math.log(5000)));
+        const ps = base.price_stale ? Math.min((rel + abs) / 2, 50) : (rel + abs) / 2;
+        const score = Math.round((0.25 * ps + 0.25 * base.title_score + 0.25 * base.infra_score + 0.15 * access + 0.10 * base.transparency) * 10) / 10;
+        const grade = score >= 68 ? 'A' : score >= 60 ? 'B' : score >= 50 ? 'C' : 'D';
+        return { ...base, price_score: Math.round(ps), score, grade, tier: tiers.find((t) => price < t[0])[1] };
+      });
+    },
+  });
+  dash.calc('kpis', {
+    inputs: ['scored'],
+    title: 'Headline figures',
+    description: 'Counts and the median price per sqm across estates with a published price.',
+    fn: (scored) => {
+      const rated = scored.filter((r) => r.score !== null);
+      const ps = rated.map((r) => r.price_per_sqm).sort((a, b) => a - b);
+      const m = Math.floor(ps.length / 2);
+      const median = Math.round(ps.length % 2 ? ps[m] : (ps[m - 1] + ps[m]) / 2);
+      const top = rated.slice().sort((a, b) => b.score - a.score)[0];
+      const nas = scored.filter((r) => r.state !== 'FCT').length;
+      return [{ rated: rated.length, median_psqm: median, strong_title: rated.filter((r) => r.title_score >= 75).length, grade_a: rated.filter((r) => r.grade === 'A').length, border_count: nas, top_name: top.name, top_score: top.score,
+        takeaway: `For building within 1–3 years, ${top.name} scores highest (${top.score}/100); the strongest picks sit in already-built parts of Lugbe, Kabusa, Karsana, Idu and Kuje, while the cheapest new launches in Gwagwalada, Bwari, Karshi and along the Keffi road in Nasarawa lose points on title and infrastructure.` }];
+    },
+  });
+  dash.calc('by_corridor', {
+    inputs: ['scored'],
+    title: 'Corridor summary',
+    description: 'Median price per sqm, average score and number of priced estates in each corridor.',
+    fn: (scored) => {
+      const g = {};
+      for (const r of scored) if (r.score !== null) (g[r.corridor] = g[r.corridor] || []).push(r);
+      return Object.entries(g).map(([corridor, rs]) => {
+        const ps = rs.map((r) => r.price_per_sqm).sort((a, b) => a - b), m = Math.floor(ps.length / 2);
+        return { corridor, n: rs.length, median_psqm: Math.round(ps.length % 2 ? ps[m] : (ps[m - 1] + ps[m]) / 2), avg_score: Math.round(rs.reduce((s, r) => s + r.score, 0) / rs.length * 10) / 10 };
+      });
+    },
+  });
+
+  const GC = { A: '#1f9d6b', B: '#7cb342', C: '#d9a400', D: '#d9534f', 'Not rated': 'var(--cds-chart-muted)' };
+  const fmtN = (v) => v == null ? '—' : v >= 1e6 ? '₦' + (v / 1e6).toFixed(v >= 1e8 ? 0 : 1).replace(/\.0$/, '') + 'M' : '₦' + d3.format(',')(v);
+  const fmtS = (v) => v == null ? '—' : '₦' + d3.format(',')(v);
+  const st = { state: '', corr: '', tier: '', grades: new Set(), q: '', sel: null, sort: ['score', -1] };
+  const $ = (s) => document.querySelector('.ae ' + s);
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  let rows = [], byId = {}, est = {};
+
+  const visible = () => rows.filter((r) => (!st.state || r.state === st.state) && (!st.corr || r.corridor === st.corr) && (!st.tier || r.tier === st.tier) && (!st.grades.size || st.grades.has(r.grade))
+    && (!st.q || (r.name + ' ' + r.corridor + ' ' + (est[r.id]?.developer || '')).toLowerCase().includes(st.q)));
+
+  // controls
+  const corrSel = $('.f-corr'), tierSel = $('.f-tier'), stateSel = $('.f-state');
+  stateSel.addEventListener('change', () => { st.state = stateSel.value; drawAll(); });
+  corrSel.addEventListener('change', () => { st.corr = corrSel.value; drawAll(); });
+  tierSel.addEventListener('change', () => { st.tier = tierSel.value; drawAll(); });
+  document.querySelectorAll('.ae .chip').forEach((b) => b.addEventListener('click', () => {
+    const g = b.dataset.g; st.grades.has(g) ? st.grades.delete(g) : st.grades.add(g); b.setAttribute('aria-pressed', st.grades.has(g)); drawAll();
+  }));
+  $('.f-reset').addEventListener('click', () => { st.state = ''; stateSel.value = ''; st.corr = ''; st.tier = ''; st.grades.clear(); st.q = ''; $('.q').value = ''; corrSel.value = ''; tierSel.value = '';
+    document.querySelectorAll('.ae .chip').forEach((b) => b.setAttribute('aria-pressed', 'false')); resetZoom(); drawAll(); });
+  $('.q').addEventListener('input', (e) => { st.q = e.target.value.trim().toLowerCase(); drawAll(); });
+  const select = (id) => { st.sel = id; drawAll(); };
+
+  // legend
+  const gleg = $('.gleg');
+  for (const [g, c] of Object.entries(GC)) { const s = el('span'); const sw = el('span', 'sw'); sw.style.background = c; s.append(sw, g === 'Not rated' ? 'No current price' : 'Grade ' + g); gleg.append(s); }
+
+  // ---------- map ----------
+  const mapbox = $('.mapbox'), mtip = mapbox.querySelector('.tip');
+  let zoom, svgSel, gSel, curK = 1;
+  const resetZoom = () => { if (svgSel && zoom) svgSel.call(zoom.transform, d3.zoomIdentity); };
+  $('.z-in').addEventListener('click', () => svgSel && svgSel.transition().call(zoom.scaleBy, 1.6));
+  $('.z-out').addEventListener('click', () => svgSel && svgSel.transition().call(zoom.scaleBy, 1 / 1.6));
+  let lastT = d3.zoomIdentity;
+  function drawMap(layers) {
+    const w = mapbox.clientWidth || 600, h = Math.max(380, Math.min(560, w * 0.78));
+    mapbox.style.minHeight = h + 'px';
+    const kx = Math.cos(9.05 * Math.PI / 180), lon0 = 7.02, lon1 = 7.92, lat0 = 8.80, lat1 = 9.31;
+    const sx = (w - 30) / ((lon1 - lon0) * kx), sy = (h - 30) / (lat1 - lat0), s = Math.min(sx, sy);
+    const ox = (w - (lon1 - lon0) * kx * s) / 2, oy = (h - (lat1 - lat0) * s) / 2;
+    const P = (lat, lng) => [ox + (lng - lon0) * kx * s, oy + (lat1 - lat) * s];
+    d3.select(mapbox).select('svg').remove();
+    svgSel = d3.select(mapbox).insert('svg', ':first-child').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Map of estates around Abuja');
+    gSel = svgSel.append('g');
+    const parse = (p) => p.split(';').map((q) => q.split(',').map(Number));
+    for (const r of layers.filter((l) => l.kind === 'road')) {
+      const pts = parse(r.path).map(([a, b]) => P(a, b));
+      gSel.append('path').attr('class', 'road').attr('d', d3.line()(pts)).attr('id', 'rd-' + r.name.replace(/\W+/g, ''));
+      const mid = pts[Math.floor(pts.length / 2)];
+      gSel.append('text').attr('class', 'roadlab').attr('x', mid[0] + 4).attr('y', mid[1] - 4).text(r.name);
+    }
+    for (const b of layers.filter((l) => l.kind === 'border')) {
+      const pts = parse(b.path).map(([a, c]) => P(a, c));
+      gSel.append('path').attr('class', 'border').attr('d', d3.line()(pts));
+      const top = pts[0];
+      gSel.append('text').attr('class', 'borderlab').attr('x', top[0] + 4).attr('y', top[1] + 12).text(b.name);
+    }
+    const pinG = gSel.append('g');
+    const placeG = gSel.append('g');
+    for (const p of layers.filter((l) => l.kind === 'place')) {
+      const [x, y] = P(...parse(p.path)[0]);
+      placeG.append('circle').attr('class', 'placedot').attr('cx', x).attr('cy', y).attr('r', 2.5);
+      placeG.append('text').attr('class', 'place').attr('x', x + 5).attr('y', y - 5).text(p.name);
+    }
+    const vis = new Set(visible().map((r) => r.id));
+    const data = rows.slice().sort((a, b) => (a.id === st.sel) - (b.id === st.sel));
+    pinG.selectAll('circle').data(data).join('circle')
+      .attr('class', (d) => 'pin' + (d.id === st.sel ? ' sel' : ''))
+      .attr('cx', (d) => P(est[d.id].lat, est[d.id].lng)[0]).attr('cy', (d) => P(est[d.id].lat, est[d.id].lng)[1])
+      .attr('fill', (d) => GC[d.grade]).attr('opacity', (d) => vis.has(d.id) ? 1 : 0.12)
+      .style('pointer-events', (d) => vis.has(d.id) ? 'auto' : 'none')
+      .on('mousemove', (ev, d) => {
+        const [mx, my] = d3.pointer(ev, mapbox);
+        mtip.replaceChildren(el('div', null, d.name), el('div', 't2', d.score == null ? 'No current price' : `Grade ${d.grade} · ${d.score}/100 · ${fmtS(d.price_per_sqm)}/sqm`));
+        mtip.style.display = 'block';
+        mtip.style.left = Math.min(mx + 12, mapbox.clientWidth - 250) + 'px'; mtip.style.top = (my + 12) + 'px';
+      })
+      .on('mouseleave', () => { mtip.style.display = 'none'; })
+      .on('click', (ev, d) => select(d.id));
+    const sizePins = (k) => pinG.selectAll('circle').attr('r', (d) => (d.id === st.sel ? 9 : 6) / k).attr('stroke-width', (d) => (d.id === st.sel ? 2.5 : 1.2) / k);
+    const sizeText = (k) => { gSel.selectAll('text').style('font-size', (_, i, n) => (n[i].classList.contains('place') ? 11 : 10) / k + 'px'); placeG.selectAll('circle').attr('r', 2.5 / k); gSel.selectAll('.road').style('stroke-width', 3 / k); gSel.selectAll('.border').style('stroke-width', 1.5 / k).style('stroke-dasharray', `${6 / k} ${4 / k}`); };
+    zoom = d3.zoom().scaleExtent([1, 12]).translateExtent([[0, 0], [w, h]]).on('zoom', (ev) => { lastT = ev.transform; curK = ev.transform.k; gSel.attr('transform', ev.transform); sizePins(curK); sizeText(curK); });
+    svgSel.call(zoom).on('dblclick.zoom', null);
+    svgSel.call(zoom.transform, lastT);
+    sizePins(curK); sizeText(curK);
+  }
+
+  // ---------- scorecard ----------
+  const det = $('.det-body');
+  function drawDetail() {
+    det.replaceChildren();
+    const r = byId[st.sel]; if (!r) { det.append(el('p', 'note', 'No estate selected yet.')); return; }
+    const e = est[r.id];
+    det.append(el('h3', null, r.name));
+    det.append(el('div', 'meta', `${r.corridor} · ${r.state} · ${e.developer}`));
+    const big = el('div', 'big');
+    const sc = el('span', 'score', r.score == null ? 'Not rated' : String(r.score));
+    sc.setAttribute('data-source', 'scored'); sc.setAttribute('data-field', 'score'); sc.setAttribute('data-where', 'id=' + encodeURIComponent(r.id));
+    const b = el('span', 'badge', r.grade === 'Not rated' ? 'No price' : 'Grade ' + r.grade); b.style.background = GC[r.grade];
+    big.append(sc, r.score == null ? '' : el('span', 'note', '/ 100'), b); det.append(big);
+    const dl = el('dl', 'facts');
+    const add = (k, v, src, field) => { const dd = el('dd', null, v); if (src) { dd.setAttribute('data-source', src); dd.setAttribute('data-field', field); dd.setAttribute('data-where', 'id=' + encodeURIComponent(r.id)); } dl.append(el('dt', null, k), dd); };
+    add('Reference plot', r.ref_sqm ? r.ref_sqm + ' sqm for ' + fmtN(r.ref_price) : '—');
+    add('Price per sqm', fmtS(r.price_per_sqm), 'scored', 'price_per_sqm');
+    add('Price tier', r.tier, 'scored', 'tier');
+    add('Plot prices', e.plot_prices, 'estates', 'plot_prices');
+    add('Title claimed', r.title, 'estates', 'title');
+    if (e.infra_note) add('On the ground', e.infra_note, 'estates', 'infra_note');
+    add('Drive to CBD', '~' + e.drive_min + ' min');
+    det.append(dl);
+    if (r.score != null) {
+      const comps = [['Price (25%)', r.price_score, 'price_score'], ['Title (25%)', r.title_score, 'title_score'], ['Infrastructure (25%)', r.infra_score, 'infra_score'], ['Access (15%)', r.access_score, 'access_score'], ['Transparency (10%)', r.transparency, 'transparency']];
+      for (const [lab, v, f] of comps) {
+        const row = el('div', 'comp'); const tr = el('div', 'track'); const fi = el('div', 'fill');
+        fi.style.width = v + '%'; fi.style.background = v >= 70 ? GC.A : v >= 50 ? GC.C : GC.D; tr.append(fi);
+        const n = el('span', null, String(v)); n.setAttribute('data-source', 'scored'); n.setAttribute('data-field', f); n.setAttribute('data-where', 'id=' + encodeURIComponent(r.id));
+        row.append(el('span', null, lab), tr, n); det.append(row);
+      }
+    }
+    if (r.price_stale) det.append(el('div', 'flag', '⏱ Price is older than 9 months or undated, so its price score is capped at 50.'));
+    if (r.state !== 'FCT') det.append(el('div', 'flag', r.state === 'Nasarawa' ? 'ⓘ Nasarawa State land: the title runs through NAGIS (Nasarawa Geographic Information Service), not FCDA/AGIS.' : 'ⓘ Listings don’t say whether this is the FCT or the Nasarawa side; confirm with AGIS and NAGIS.'));
+    if (e.flags) det.append(el('div', 'flag', '⚠ ' + e.flags));
+    const src = el('p', 'note'); const a = el('a', null, e.source); a.href = e.source_url; a.target = '_blank'; a.rel = 'noopener';
+    src.append('Source: ', a, e.source_date ? ' (' + e.source_date + ')' : ' (undated)'); det.append(src);
+  }
+
+  // ---------- scatter ----------
+  const scBox = $('.sc'), stip = scBox.querySelector('.tip');
+  function drawScatter() {
+    d3.select(scBox).select('svg').remove();
+    const data = visible().filter((r) => r.score != null);
+    const w = scBox.clientWidth || 400, h = 300, m = { t: 10, r: 14, b: 34, l: 36 };
+    const svg = d3.select(scBox).insert('svg', ':first-child').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const x = d3.scaleLog([3000, 400000], [m.l, w - m.r]), y = d3.scaleLinear([30, 80], [h - m.b, m.t]);
+    const xa = svg.append('g').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickValues([5000, 10000, 25000, 50000, 100000, 250000]).tickFormat((v) => '₦' + d3.format('~s')(v)).tickSizeOuter(0));
+    const ya = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(w - m.l - m.r)));
+    [xa, ya].forEach((a) => { a.attr('font-size', null).attr('font-family', null); a.selectAll('text').attr('fill', 'var(--color-fg-muted)').style('font-size', '11px'); a.select('.domain').attr('stroke', 'var(--cds-chart-axis)'); a.selectAll('line').attr('stroke', 'var(--cds-chart-grid)'); });
+    ya.select('.domain').remove();
+    svg.append('text').attr('x', w - m.r).attr('y', h - 4).attr('text-anchor', 'end').attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text('₦ per sqm →');
+    svg.append('text').attr('x', m.l + 4).attr('y', m.t + 10).attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text('Score ↑');
+    svg.append('g').selectAll('circle').data(data).join('circle')
+      .attr('cx', (d) => x(Math.max(3000, d.price_per_sqm))).attr('cy', (d) => y(d.score)).attr('r', (d) => d.id === st.sel ? 8 : 5.5)
+      .attr('fill', (d) => GC[d.grade]).attr('stroke', (d) => d.id === st.sel ? 'var(--color-fg)' : 'var(--color-panel)').attr('stroke-width', (d) => d.id === st.sel ? 2.5 : 1).style('cursor', 'pointer')
+      .on('mousemove', (ev, d) => { const [mx, my] = d3.pointer(ev, scBox); stip.replaceChildren(el('div', 't2', d.corridor), el('div', null, d.name), el('div', null, `${d.score}/100 · ${fmtS(d.price_per_sqm)}/sqm`)); stip.style.display = 'block'; stip.style.left = Math.min(mx + 12, w - 250) + 'px'; stip.style.top = (my + 12) + 'px'; })
+      .on('mouseleave', () => { stip.style.display = 'none'; })
+      .on('click', (ev, d) => select(d.id));
+  }
+
+  // ---------- corridor bars ----------
+  const cbBox = $('.cb');
+  function drawCorr(data) {
+    d3.select(cbBox).select('svg').remove();
+    data = data.slice().sort((a, b) => b.median_psqm - a.median_psqm);
+    const w = cbBox.clientWidth || 400, rowH = 30, m = { t: 4, r: 110, b: 4, l: 10 };
+    const h = m.t + m.b + rowH * data.length; cbBox.style.minHeight = h + 'px';
+    const svg = d3.select(cbBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const tmp = svg.append('text').style('font-size', '12px').text('');
+    const labW = d3.max(data, (d) => { tmp.text(d.corridor); return tmp.node().getComputedTextLength(); }) + 10; tmp.remove();
+    const x = d3.scaleLinear([0, d3.max(data, (d) => d.median_psqm)], [m.l + labW, w - m.r]);
+    const g = svg.selectAll('g').data(data).join('g').attr('transform', (d, i) => `translate(0,${m.t + i * rowH})`).style('cursor', 'pointer')
+      .on('click', (ev, d) => { st.corr = st.corr === d.corridor ? '' : d.corridor; corrSel.value = st.corr; drawAll(); });
+    g.append('text').attr('x', m.l).attr('y', rowH / 2 + 4).style('font-size', '12px').attr('fill', 'var(--color-fg)').text((d) => d.corridor);
+    g.append('rect').attr('x', x(0)).attr('y', 7).attr('height', rowH - 14).attr('rx', 4).attr('width', (d) => Math.max(2, x(d.median_psqm) - x(0)))
+      .attr('fill', (d) => !st.corr || st.corr === d.corridor ? dash.colors[0] : 'var(--cds-chart-muted)');
+    g.append('text').attr('x', (d) => x(d.median_psqm) + 6).attr('y', rowH / 2 + 4).style('font-size', '11px').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => `${fmtS(d.median_psqm)} · ${d.avg_score} · ${d.n}`);
+  }
+
+  // ---------- market bars ----------
+  const mkBox = $('.mk');
+  function drawMarket(data) {
+    d3.select(mkBox).select('svg').remove();
+    data = data.slice().sort((a, b) => b.listings - a.listings);
+    const w = mkBox.clientWidth || 400, rowH = 28, m = { t: 4, r: 150, b: 4, l: 10 };
+    const h = m.t + m.b + rowH * data.length; mkBox.style.minHeight = h + 'px';
+    const svg = d3.select(mkBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const labW = 170;
+    const x = d3.scaleLinear([0, d3.max(data, (d) => d.listings)], [m.l + labW, w - m.r]);
+    const g = svg.selectAll('g').data(data).join('g').attr('transform', (d, i) => `translate(0,${m.t + i * rowH})`);
+    g.append('text').attr('x', m.l).attr('y', rowH / 2 + 4).style('font-size', '12px').attr('fill', 'var(--color-fg)').text((d) => d.area);
+    g.append('rect').attr('x', x(0)).attr('y', 7).attr('height', rowH - 14).attr('rx', 4).attr('width', (d) => x(d.listings) - x(0)).attr('fill', dash.colors[1]);
+    g.append('text').attr('x', (d) => x(d.listings) + 6).attr('y', rowH / 2 + 4).style('font-size', '11px').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => `${d.listings} listings · ${d.avg_price == null || d.avg_price === '' ? 'no avg published' : 'avg ' + fmtN(Number(d.avg_price))} · ${d.as_of}`);
+  }
+
+  // ---------- table ----------
+  const tbody = $('.tbl tbody');
+  document.querySelectorAll('.ae .tbl th').forEach((th) => th.addEventListener('click', () => {
+    const k = th.dataset.k; st.sort = [k, st.sort[0] === k ? -st.sort[1] : (['name', 'corridor', 'state', 'tier', 'title', 'grade'].includes(k) ? 1 : -1)];
+    document.querySelectorAll('.ae .tbl th').forEach((t) => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', st.sort[1] > 0 ? 'ascending' : 'descending'); drawTable();
+  }));
+  tbody.addEventListener('click', (ev) => { const tr = ev.target.closest('tr[data-key]'); if (tr) { select(tr.dataset.key); document.getElementById('map').scrollIntoView({ behavior: 'smooth' }); } });
+  function drawTable() {
+    const [k, dir] = st.sort;
+    const data = visible().slice().sort((a, b) => { const va = a[k], vb = b[k]; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb))) * dir; });
+    tbody.replaceChildren(...data.map((r) => {
+      const tr = el('tr', r.id === st.sel ? 'sel' : ''); tr.dataset.key = r.id;
+      const gtd = el('td'); const b = el('span', 'badge', r.grade === 'Not rated' ? '—' : r.grade); b.style.background = GC[r.grade]; gtd.append(b);
+      tr.append(el('td', null, r.name), el('td', 'hide-n', r.corridor), el('td', 'hide-n', r.state), el('td', 'hide-n', r.tier), el('td', 'num hide-n', r.ref_sqm ? r.ref_sqm + ' sqm' : '—'),
+        el('td', 'num', fmtN(r.ref_price)), el('td', 'num', fmtS(r.price_per_sqm)), el('td', 'hide-n', r.title), el('td', 'num', r.score == null ? '—' : String(r.score)), gtd);
+      return tr;
+    }));
+  }
+
+  // ---------- orchestration ----------
+  let layers = [], corrData = [], market = [];
+  function drawAll() {
+    const n = visible().length; $('.f-count').textContent = `${n} of ${rows.length} estates shown`;
+    if (layers.length) drawMap(layers);
+    drawDetail(); drawScatter(); if (corrData.length) drawCorr(corrData); drawTable();
+  }
+  const fail = (box) => { d3.select(box).select('svg').remove(); if (!box.querySelector('.fail')) box.append(el('div', 'fail', 'Failed to load')); };
+
+  dash.onData(() => {
+    const s = dash.data('scored'), e = dash.data('estates'), l = dash.data('map_layers'), c = dash.data('by_corridor'), mk = dash.data('area_market'), kp = dash.data('kpis');
+    // KPIs
+    document.querySelectorAll('.ae [data-source=kpis]').forEach((n) => {
+      if (kp.status === 'ok' && kp.data.length) {
+        n.classList.remove('dash-skeleton'); const v = kp.data[0][n.dataset.field];
+        n.textContent = n.dataset.field === 'median_psqm' ? fmtS(v) : String(v);
+      } else if (kp.status === 'error') { n.classList.remove('dash-skeleton'); n.textContent = '—'; }
+    });
+    if (s.status === 'ok' && e.status === 'ok') {
+      rows = s.data; byId = Object.fromEntries(rows.map((r) => [r.id, r])); est = Object.fromEntries(e.data.map((r) => [r.id, r]));
+      if (!st.sel) st.sel = rows.filter((r) => r.score != null).sort((a, b) => b.score - a.score)[0]?.id;
+      const corrs = [...new Set(rows.map((r) => r.corridor))].sort();
+      corrSel.replaceChildren(new Option('All corridors', ''), ...corrs.map((c) => new Option(c, c))); corrSel.value = st.corr;
+      tierSel.value = st.tier;
+    }
+    layers = l.status === 'ok' ? l.data : [];
+    corrData = c.status === 'ok' ? c.data : [];
+    if (s.status === 'error' || e.status === 'error') { fail(mapbox); fail(scBox); }
+    if (l.status === 'error') fail(mapbox);
+    if (c.status === 'error') fail(cbBox);
+    if (rows.length) drawAll();
+    if (mk.status === 'ok') drawMarket(mk.data); else if (mk.status === 'error') fail(mkBox);
+  });
+
+  const named = document.getElementById(location.hash.slice(1)); if (named) named.scrollIntoView();
+})();
+</script>
+
+</div>
+<script>
+(() => {
+  const info = document.getElementById('saInfo'), box = document.getElementById('saLoad'), pick = document.getElementById('saPick');
+  document.addEventListener('sa-loaded', (e) => { info.textContent = `${e.detail.count} estates from estates.csv`; box.hidden = true; });
+  pick.addEventListener('change', async () => {
+    let csv = null, layers = window.dash.data('map_layers').data || [], market = window.dash.data('area_market').data || [];
+    for (const f of pick.files) {
+      const t = await f.text();
+      if (/\.csv$/i.test(f.name)) csv = t;
+      else if (/map_layers/i.test(f.name)) layers = JSON.parse(t);
+      else if (/area_market/i.test(f.name)) market = JSON.parse(t);
+    }
+    if (csv) window.dash.setData(csv, layers, market); else info.textContent = 'Pick estates.csv as well.';
+  });
+  window.dash.loadFromUrls().then((ok) => { if (!ok) { box.hidden = false; info.textContent = 'Data not loaded'; } });
+})();
+</script>
+</body>
+</html>
