@@ -37,9 +37,9 @@
   font-size: 12px;
   color: var(--color-fg-muted, var(--ink-2));
 }
-.site-form input,
+.site-form input:not([type="checkbox"]),
 .site-form select,
-.ae .site-form input,
+.ae .site-form input:not([type="checkbox"]),
 .ae .site-form select {
   font: inherit;
   font-size: 15px;
@@ -63,22 +63,42 @@
 .site-form .site-tried select:user-invalid {
   border-color: var(--color-bad, var(--warn));
 }
-.site-check {
+.site-form .site-check {
   display: flex;
-  gap: 10px;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
   font-size: 14px;
   line-height: 1.4;
   color: var(--color-fg, var(--ink));
 }
-.site-check input {
+.site-form .site-check input,
+.ae .site-form .site-check input {
   width: 1.1rem;
   height: 1.1rem;
-  margin-top: 2px;
-  flex: none;
+  min-width: 1.1rem;
+  max-width: 1.1rem;
+  margin: 2px 0 0;
+  padding: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
-.site-check label { font-size: 14px; color: inherit; }
+.site-form .site-check label,
+.ae .site-form .site-check label {
+  display: block;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
+  line-height: 1.4;
+  color: inherit;
+}
 .site-submit,
 .ae .site-submit {
   font: inherit;
