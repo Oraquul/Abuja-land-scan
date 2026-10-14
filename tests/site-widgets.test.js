@@ -73,14 +73,35 @@ const fields = {
   buyer_type: "diaspora",
 };
 const payload = site.buildPayload(fields, web3on);
-assert.deepStrictEqual(Object.keys(payload).sort(), ["access_key", "botcheck", "budget", "buyer_type", "consent", "email", "estate", "name", "phone", "subject"]);
+assert.deepStrictEqual(Object.keys(payload).sort(), ["access_key", "botcheck", "budget", "buyer_type", "city", "consent", "email", "estate", "name", "phone", "subject"]);
 assert.strictEqual(payload.consent, "yes");
+assert.strictEqual(payload.city, "Abuja");
+assert.strictEqual(payload.estate, "Example estate");
+assert.strictEqual(payload.subject, "Estate enquiry (Abuja): Example estate");
 assert.strictEqual(payload.access_key, "public-key");
 assert.ok(!("company" in payload));
 assert.ok(!("_replyto" in payload));
 const formspreePayload = site.buildPayload(fields, formspree);
-assert.deepStrictEqual(Object.keys(formspreePayload).sort(), ["_gotcha", "_replyto", "_subject", "budget", "buyer_type", "consent", "email", "estate", "name", "phone"]);
+assert.deepStrictEqual(Object.keys(formspreePayload).sort(), ["_gotcha", "_replyto", "_subject", "budget", "buyer_type", "city", "consent", "email", "estate", "name", "phone"]);
+assert.strictEqual(formspreePayload.city, "Abuja");
+assert.strictEqual(formspreePayload.estate, "Example estate");
+assert.strictEqual(formspreePayload._subject, "Estate enquiry (Abuja): Example estate");
 assert.ok(!("access_key" in formspreePayload));
+
+const lagosFields = Object.assign({}, fields, { city: "Lagos-Ogun", estate: "Example Lekki estate" });
+const lagosPayload = site.buildPayload(lagosFields, formspree);
+assert.strictEqual(lagosPayload.city, "Lagos-Ogun");
+assert.strictEqual(lagosPayload.estate, "Example Lekki estate");
+assert.strictEqual(lagosPayload._subject, "Estate enquiry (Lagos-Ogun): Example Lekki estate");
+assert.strictEqual(site.editionCity("Abuja", "/Abuja-land-scan/lagos/index.html"), "Abuja");
+assert.strictEqual(site.editionCity("", "/Abuja-land-scan/lagos/studio.html"), "Lagos-Ogun");
+assert.strictEqual(site.editionCity(null, "/Abuja-land-scan/index.html"), "Abuja");
+assert.strictEqual(site.editionCity(undefined, "/Abuja-land-scan/lagos"), "Lagos-Ogun");
+assert.strictEqual(site.editionCity("nope", "/lagos-other/index.html"), "Abuja");
+const lagosWa = site.whatsappHref("2348012345678", "Example Lekki estate", "dashboard", "Lagos-Ogun");
+assert.ok(decodeURIComponent(lagosWa).includes("Lagos + Ogun Land Scan"));
+assert.ok(decodeURIComponent(lagosWa).includes("Example Lekki estate"));
+assert.ok(decodeURIComponent(site.whatsappHref("2348012345678", "", "studio", "Lagos-Ogun")).includes("Lagos + Ogun Plot-to-Home Studio"));
 
 assert.strictEqual(site.publicSourceUrl("https://nigeriapropertycentre.com/for-sale/land"), "https://nigeriapropertycentre.com/for-sale/land");
 assert.strictEqual(site.publicSourceUrl("https://ng.linkedin.com/in/someone"), "");

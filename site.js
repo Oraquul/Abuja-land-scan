@@ -87,10 +87,38 @@
     return s;
   }
 
-  function whatsappHref(number, estate, page) {
+  function canonicalCity(value) {
+    var s = String(value == null ? "" : value).trim();
+    if (s === "Abuja" || s === "Lagos-Ogun") return s;
+    return "";
+  }
+
+  function editionFromPath(pathname) {
+    var path = String(pathname == null ? "" : pathname).replace(/\\/g, "/");
+    try { path = decodeURIComponent(path); } catch (e) { /* keep the raw path */ }
+    if (/(^|\/)lagos(\/|$)/i.test(path)) return "Lagos-Ogun";
+    return "Abuja";
+  }
+
+  function editionCity(explicit, pathname) {
+    var given = canonicalCity(explicit);
+    if (given) return given;
+    if (pathname == null && typeof location !== "undefined" && location && typeof location.pathname === "string") {
+      pathname = location.pathname;
+    }
+    return editionFromPath(pathname);
+  }
+
+  function editionPlace(page, city) {
+    var lagos = editionCity(city) === "Lagos-Ogun";
+    if (page === "studio") return lagos ? "Lagos + Ogun Plot-to-Home Studio" : "Plot-to-Home Studio";
+    return lagos ? "Lagos + Ogun Land Scan" : "Abuja Estate Land Scan";
+  }
+
+  function whatsappHref(number, estate, page, city) {
     var n = digits(number);
     if (!n) return "";
-    var where = page === "studio" ? "Plot-to-Home Studio" : "Abuja Estate Land Scan";
+    var where = editionPlace(page, city);
     var place = safeEstate(estate);
     var text = place
       ? "Hello, I am looking at " + place + " on the " + where + " and would like to ask a few questions."
@@ -118,22 +146,26 @@
   }
 
   function buildPayload(fields, cfg) {
+    fields = fields || {};
     var estate = clip(fields.estate, 160);
+    var city = editionCity(fields.city);
     var payload = {
       name: clip(fields.name, 120),
       phone: clip(fields.phone, 40),
       email: clip(fields.email, 160),
       estate: estate,
+      city: city,
       budget: fields.budget,
       buyer_type: fields.buyer_type,
       consent: "yes",
     };
+    var subject = "Estate enquiry (" + city + ")" + (estate ? ": " + estate : "");
     if (cfg && cfg.web3forms) {
       payload.access_key = cfg.web3formsAccessKey;
-      payload.subject = "Estate enquiry: " + estate;
+      payload.subject = subject;
       payload.botcheck = "";
     } else {
-      payload._subject = "Estate enquiry: " + estate;
+      payload._subject = subject;
       payload._replyto = payload.email;
       payload._gotcha = "";
     }
@@ -156,6 +188,7 @@
     whatsappHref: whatsappHref,
     publicSourceUrl: publicSourceUrl,
     safeEstate: safeEstate,
+    editionCity: editionCity,
     buildPayload: buildPayload,
     allowedBudget: allowedBudget,
     allowedBuyer: allowedBuyer,
@@ -210,7 +243,7 @@
   function updateWhatsApp() {
     var link = document.getElementById("site-wa");
     if (!link) return;
-    var href = whatsappHref(cfg.whatsappNumber, viewedEstate, document.body.getAttribute("data-site-page"));
+    var href = whatsappHref(cfg.whatsappNumber, viewedEstate, document.body.getAttribute("data-site-page"), document.body.getAttribute("data-city"));
     if (!href) {
       link.hidden = true;
       return;
@@ -223,7 +256,7 @@
 
   function mountWhatsApp() {
     if (document.getElementById("site-wa")) return;
-    var href = whatsappHref(cfg.whatsappNumber, "", document.body.getAttribute("data-site-page"));
+    var href = whatsappHref(cfg.whatsappNumber, "", document.body.getAttribute("data-site-page"), document.body.getAttribute("data-city"));
     if (!href) return;
     var a = document.createElement("a");
     a.id = "site-wa";
@@ -275,6 +308,12 @@
     form.className = "site-form";
     form.noValidate = true;
     form.setAttribute("aria-labelledby", "enquire-title");
+    var cityInput = document.createElement("input");
+    cityInput.type = "hidden";
+    cityInput.name = "city";
+    cityInput.autocomplete = "off";
+    cityInput.value = editionCity(document.body && document.body.getAttribute("data-city"));
+    form.appendChild(cityInput);
     var grid = document.createElement("div");
     grid.className = "site-grid";
 
@@ -395,6 +434,7 @@
       phone: form.phone.value,
       email: form.email.value,
       estate: form.estate.value,
+      city: form.city ? form.city.value : "",
       budget: form.budget.value,
       buyer_type: form.buyer_type.value,
       consent: form.consent.checked,
