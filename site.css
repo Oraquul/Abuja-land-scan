@@ -165,3 +165,11 @@ html[data-wa="on"] .site-disclaimer {
 @media (prefers-reduced-motion: reduce) {
   .site-wa { transition: none; }
 }
+
+/* Narrow screens: keep the enquiry form inside the page width. */
+.site-form input,
+.site-form select,
+.ae .site-form input,
+.ae .site-form select { max-width: 100%; box-sizing: border-box; }
+.site-check label { display: block; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.site-lead, .site-form, .site-check { min-width: 0; max-width: 100%; box-sizing: border-box; }

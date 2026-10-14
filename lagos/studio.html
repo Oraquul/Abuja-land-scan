@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../site.css">
 <style>
 html,body{margin:0}[hidden]{display:none!important}
 
@@ -151,7 +152,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
 @media (prefers-reduced-motion: no-preference){.panel.on{animation:fade .25s ease-out}@keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}}
 </style>
 </head>
-<body>
+<body data-site-page="studio">
 
 
 <div class="app">
@@ -268,6 +269,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
         <button class="btn" id="copySummary">Copy summary text</button>
       </div>
       <p class="note" id="sumMsg"></p>
+      <div id="enquire"></div>
     </section>
   </main>
 
@@ -275,6 +277,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     <span class="tag">Running estimate</span>
     <p class="client" id="q-client">—</p>
     <p class="estate" id="q-estate"></p>
+    <div class="qactions"><button class="btn" type="button" id="openEnquire">Ask about this estate</button></div>
     <div class="total" id="q-total">—</div>
     <div class="budgetbar" id="q-bar"><span></span></div>
     <div class="note" id="q-budget"></div>
@@ -283,6 +286,11 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     <div style="margin-top:14px" id="q-energy"></div>
   </aside>
 </div>
+
+<footer class="site-disclaimer">
+  <p>Prices shown are public asking prices, not a valuation or an offer. Titles are what sellers claim and have not been verified. Nothing here is legal, surveying, or investment advice.</p>
+  <p><a href="../index.html">Abuja land scan</a> · <a href="index.html">Lagos + Ogun land scan</a> · <a href="studio.html">Plot-to-Home Studio (Lagos)</a> · <a href="../privacy.html">Privacy notice</a></p>
+</footer>
 
 <dialog id="ratesDlg" aria-labelledby="rates-h">
   <div class="dlg-h"><h3 id="rates-h" style="flex:1">Rates &amp; assumptions</h3><button class="btn" id="resetRates">Undo changes</button><button class="btn primary" id="saveRates">Save rates</button><button class="btn" id="closeRates" aria-label="Close">Close</button></div>
@@ -381,7 +389,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
   const RATE_KEYS = RATE_DEFS.flatMap(([, list]) => list.map((r) => r[0]));
 
   const EXAMPLE_SESSION = {
-    client: 'Example: Mr & Mrs Adeyemi', estate: 'Example: Bogije estate, Lekki–Epe expressway', plot: 600, type: 'd4', floor: 300, baths: 5, household: 5, budget: 200000000,
+    client: 'Example household', estate: 'Example: Bogije estate, Lekki–Epe expressway', plot: 600, type: 'd4', floor: 300, baths: 5, household: 5, budget: 200000000,
     style: 'tropical', notes: 'Example notes. Plot sits low and holds water in July; estate requires approved elevations. Client wants a home office and a bright kitchen.',
     finishes: { floor: 'premium', kitchen: 'premium', bath: 'standard', ceiling: 'premium', windows: 'standard', facade: 'standard' },
     landscape: { sandfill: 12, raft: 150, soiltest: 1, drain: 90, lawn: 120, paving: 110, trees: 3, hedge: 70, lights: 8, rainwater: 1, borehole: 1, watertreat: 1 },
@@ -741,7 +749,11 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
     b.hidden = !ratesExample; b.className = 'banner';
     b.replaceChildren('Example rates are loaded so you can try the tool. They are not market prices. ', el('button', { class: 'btn', onclick: () => $('#openRates').click() }, 'Set your rates'));
   }
-  function renderAll() { renderBanner(); renderBrief(); renderFinishes(); renderLandscape(); renderEnergy(); renderQuote(); renderPicker(); if (activePanel === 'summary') renderSummary(); }
+  function renderAll() {
+    renderBanner(); renderBrief(); renderFinishes(); renderLandscape(); renderEnergy(); renderQuote(); renderPicker();
+    if (activePanel === 'summary') renderSummary();
+    if (window.siteSetEstate) window.siteSetEstate(String(S.estate || '').trim());
+  }
 
   window.addEventListener('resize', () => { if (activePanel === 'energy') drawEnergyChart(energy()); });
   try { const p = localStorage.getItem('p2h-step'); if (p && document.getElementById('p-' + p)) show(p); } catch {}
@@ -806,5 +818,7 @@ dialog::backdrop{background:rgba(10,20,20,.45)}
 })();
 </script>
 
+<script src="../site-config.js"></script>
+<script src="../site.js"></script>
 </body>
 </html>
