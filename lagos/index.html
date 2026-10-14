@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lagos + Ogun Land Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root{
+  --color-bg:#f6f7f5; --color-panel:#ffffff; --color-fg:#1b2421; --color-fg-muted:#5b6863; --color-border-line:#dde3e0;
+  --color-ok:#1f7a4d; --color-warn:#9a6a00; --color-bad:#b23b2b;
+  --cds-chart-grid:#e8ece9; --cds-chart-axis:#b9c2be; --cds-chart-muted:#c4ccc8; --cds-chart-reference:#8a948f;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.12);
+  --font-anthropic-sans:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-anthropic-serif:"Source Serif 4", Georgia, serif;
+  --cds-radius:8px; --cds-pad-xs:4px; --cds-pad-sm:8px; --cds-pad-md:12px; --cds-pad-lg:16px; --cds-pad-xl:24px;
+  --cds-gap-xs:4px; --cds-gap-sm:8px; --cds-gap-md:12px; --cds-gap-lg:20px; --cds-gap-xl:28px;
+  --cds-font-size-caption:12px; --cds-font-size-body:14px; --cds-font-size-heading:16px; --cds-font-size-title:28px;
+  --cds-font-weight-medium:600; --cds-dur-slow:.3s;
+  --cds-surface-popover:var(--color-panel); --cds-border:var(--color-border-line); --cds-text-secondary:var(--color-fg-muted);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --color-bg:#151918; --color-panel:#1d2321; --color-fg:#e4ebe8; --color-fg-muted:#9aa8a3; --color-border-line:#2f3835;
+  --color-ok:#6cc596; --color-warn:#e2b443; --color-bad:#ef8a78;
+  --cds-chart-grid:#2a3230; --cds-chart-axis:#4a5551; --cds-chart-muted:#46504c; --cds-chart-reference:#7d8984;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --color-bg:#151918; --color-panel:#1d2321; --color-fg:#e4ebe8; --color-fg-muted:#9aa8a3; --color-border-line:#2f3835;
+  --color-ok:#6cc596; --color-warn:#e2b443; --color-bad:#ef8a78;
+  --cds-chart-grid:#2a3230; --cds-chart-axis:#4a5551; --cds-chart-muted:#46504c; --cds-chart-reference:#7d8984;
+  --cds-shadow-popover:0 6px 24px rgba(0,0,0,.5); color-scheme:dark}
+html,body{margin:0}
+body{background:var(--color-bg);color:var(--color-fg);font-family:var(--font-anthropic-sans);font-size:14px;line-height:1.45}
+*{box-sizing:border-box}
+#dash-root{max-width:1280px;margin:0 auto;padding:20px clamp(16px,3vw,32px) 40px}
+.dash-skeleton{color:transparent!important;background:var(--cds-chart-grid);border-radius:6px;min-height:1em}
+.sa-bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;font-size:12px;color:var(--color-fg-muted);margin-bottom:12px}
+.sa-bar label{cursor:pointer;text-decoration:underline}
+.sa-load{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:8px;padding:16px;margin-bottom:16px}
+.sa-load[hidden]{display:none}
+[hidden]{display:none!important}
+</style>
+<script>
+/* Standalone data runtime: reads estates.csv, map_layers.min.json and area_market.min.json
+   from this folder (or files picked by the viewer) and serves them to the page in the same
+   shape the claude.ai dashboard uses. */
+window.dash = (() => {
+  const raw = {}; const calcs = {}; const subs = []; let state = 'loading'; let message = '';
+  const NUM = ['lat','lng','ref_sqm','ref_price','price_per_sqm','title_score','infra_score','drive_min','transparency','growth_score'];
+  function typeEstates(rows) {
+    return rows.filter((r) => r.id).map((r) => {
+      const o = { ...r };
+      for (const k of NUM) o[k] = (r[k] === undefined || String(r[k]).trim() === '') ? null : Number(r[k]);
+      if (o.price_per_sqm == null && o.ref_price && o.ref_sqm) o.price_per_sqm = Math.round(o.ref_price / o.ref_sqm);
+      o.price_stale = /^true$/i.test(String(r.price_stale || '').trim());
+      return o;
+    });
+  }
+  function reset() { for (const c of Object.values(calcs)) c.cache = undefined; }
+  function data(id) {
+    if (raw[id]) return { status: 'ok', data: raw[id], columns: raw[id].columns || Object.keys(raw[id][0] || {}), refreshing: false, meta: [] };
+    const c = calcs[id];
+    if (c) {
+      const ins = c.inputs.map(data);
+      const bad = ins.find((x) => x.status !== 'ok');
+      if (bad) return { status: bad.status, data: [], message: bad.message };
+      if (c.cache === undefined) c.cache = c.fn(...ins.map((x) => x.data));
+      return { status: 'ok', data: c.cache, refreshing: false, meta: [] };
+    }
+    return { status: state === 'error' ? 'error' : 'loading', data: [], message };
+  }
+  function run() { for (const fn of subs) { try { fn(); } catch (e) { console.error(e); } } }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (state === 'ok') run(); }, 150); });
+  async function loadFromUrls() {
+    try {
+      const [csv, layers, market] = await Promise.all([
+        fetch('estates.csv', { cache: 'no-store' }).then((r) => { if (!r.ok) throw new Error('estates.csv ' + r.status); return r.text(); }),
+        fetch('map_layers.min.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).catch(() => []),
+        fetch('area_market.min.json', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).catch(() => []),
+      ]);
+      setData(csv, layers, market); return true;
+    } catch (e) { state = 'error'; message = String(e.message || e); run(); return false; }
+  }
+  function setData(csvText, layers, market) {
+    const rows = typeEstates(d3.csvParse(csvText.replace(/^﻿/, '')));
+    raw.estates = rows; raw.map_layers = layers || []; raw.area_market = market || [];
+    state = 'ok'; reset(); run();
+    document.dispatchEvent(new CustomEvent('sa-loaded', { detail: { count: rows.length } }));
+  }
+  return {
+    data, setData, loadFromUrls,
+    calc(id, def) { calcs[id] = { inputs: def.inputs, fn: def.fn, cache: undefined }; },
+    loader() {},
+    onData(fn) { subs.push(fn); try { fn(); } catch (e) { console.error(e); } },
+    colors: ['#2f6f8f', '#c27c2c', '#4f8a5b', '#8a5aa6', '#b23b2b', '#3f8f8a', '#9a6a00', '#5b6863'],
+    refresh() { loadFromUrls(); }, params() { return {}; }, setParams() {}, resetParams() {}, setLink() {},
+  };
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<div class="sa-bar"><span id="saInfo">Loading estates.csv…</span><span>Standalone edition · <label for="saPick">load data files</label><input id="saPick" type="file" accept=".csv,.json" multiple hidden></span></div>
+<div class="sa-load" id="saLoad" hidden>
+  <b>The data files couldn't be read automatically.</b>
+  <p style="margin:6px 0 10px">This happens when the page is opened straight from your computer or Drive instead of a web host. Pick <code>estates.csv</code> (and optionally <code>map_layers.min.json</code> and <code>area_market.min.json</code>) to load them.</p>
+  <label for="saPick" style="text-decoration:underline;cursor:pointer">Choose files</label>
+</div>
+<style>
+.ae{font-family:var(--font-anthropic-sans);color:var(--color-fg);display:flex;flex-direction:column;gap:var(--cds-gap-lg)}
+.ae h1{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);margin:0}
+.ae h2{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.ae .sub{color:var(--color-fg-muted);font-size:var(--cds-font-size-body);margin:var(--cds-gap-xs) 0 0}
+.ae .note{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption);margin:2px 0 var(--cds-gap-sm)}
+.ae .card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);min-width:0}
+.ae .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:var(--cds-gap-md)}
+.ae .kpi .lab{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.ae .kpi .val{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums;margin-top:var(--cds-gap-xs)}
+.ae .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.ae .mapgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(min(100%,18rem),1fr);gap:var(--cds-gap-md)}
+@media (max-width:820px){.ae .mapgrid{grid-template-columns:1fr}}
+.ae .bar{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}
+.ae select,.ae input[type=search],.ae button{font:inherit;font-size:var(--cds-font-size-caption);color:var(--color-fg);background:var(--color-bg);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-xs) var(--cds-pad-sm)}
+.ae button{cursor:pointer}
+.ae .chip[aria-pressed=true],.ae .mode[aria-pressed=true]{background:var(--color-fg);color:var(--color-bg)}
+.ae .modes{display:inline-flex;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);overflow:hidden}
+.ae .modes .mode{border:0;border-radius:0}
+.ae .mapbox{position:relative;min-height:340px;touch-action:none}
+.ae .mapbox svg{display:block;cursor:grab}
+.ae .road{fill:none;stroke:var(--cds-chart-grid);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.ae .planned{fill:none;stroke:var(--color-fg-muted);stroke-width:2;stroke-dasharray:2 4;stroke-linecap:round;opacity:.7}
+.ae .coast{fill:none;stroke:var(--color-fg-muted);stroke-width:1;opacity:.55}
+.ae .border{fill:none;stroke:var(--color-fg-muted);stroke-width:1.5;stroke-dasharray:6 4}
+.ae .borderlab,.ae .coastlab{fill:var(--color-fg-muted);font-size:10px;font-style:italic}
+.ae .roadlab{fill:var(--color-fg-muted);font-size:10px}
+.ae .place{fill:var(--color-fg);font-size:11px;font-weight:500;paint-order:stroke;stroke:var(--color-panel);stroke-width:3px}
+.ae .placedot{fill:var(--color-fg-muted)}
+.ae .hubmk{fill:var(--color-panel);stroke:var(--color-fg);stroke-width:1.5}
+.ae .hublab{fill:var(--color-fg);font-size:11px;font-weight:600;paint-order:stroke;stroke:var(--color-panel);stroke-width:3px}
+.ae .pin{cursor:pointer;stroke:var(--color-panel)}
+.ae .pin.sel{stroke:var(--color-fg)}
+.ae .tip{position:absolute;pointer-events:none;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);max-width:240px;display:none;z-index:2}
+.ae .tip .t2{color:var(--cds-text-secondary)}
+.ae .legend{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-top:var(--cds-gap-sm)}
+.ae .sw{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:4px;vertical-align:middle}
+.ae .zoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px}
+.ae .det h3{font-size:var(--cds-font-size-heading);font-weight:var(--cds-font-weight-medium);margin:0}
+.ae .det .meta{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-top:2px}
+.ae .det .big{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--cds-gap-sm);margin:var(--cds-gap-md) 0}
+.ae .det .score{font-family:var(--font-anthropic-serif);font-size:var(--cds-font-size-title);font-variant-numeric:tabular-nums}
+.ae .det .other{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.ae .badge{display:inline-block;border-radius:999px;padding:1px 8px;font-size:var(--cds-font-size-caption);color:#fff;font-weight:500}
+.ae .facts{display:grid;grid-template-columns:auto 1fr;gap:4px var(--cds-gap-md);font-size:var(--cds-font-size-caption);margin:var(--cds-gap-sm) 0}
+.ae .facts dt{color:var(--color-fg-muted)}
+.ae .facts dd{margin:0;font-variant-numeric:tabular-nums}
+.ae .comp{display:grid;grid-template-columns:8rem 1fr 2rem;align-items:center;gap:6px;font-size:var(--cds-font-size-caption);margin:4px 0}
+.ae .track{height:8px;border-radius:4px;background:var(--cds-chart-grid);overflow:hidden}
+.ae .fill{height:100%;border-radius:4px}
+.ae .flag{margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-warn)}
+.ae .det a{font-size:var(--cds-font-size-caption);color:var(--color-fg)}
+.ae .tblwrap{max-height:520px;overflow:auto}
+.ae table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
+.ae th{position:sticky;top:0;background:var(--color-panel);text-align:left;font-weight:var(--cds-font-weight-medium);padding:6px;border-bottom:1px solid var(--color-border-line);cursor:pointer;white-space:nowrap}
+.ae td{padding:6px;border-bottom:1px solid var(--color-border-line)}
+.ae td.num,.ae th.num{text-align:right}
+.ae tbody tr{cursor:pointer}
+.ae tbody tr:hover{background:var(--color-bg)}
+.ae tbody tr.sel{outline:2px solid var(--color-fg);outline-offset:-2px}
+@media (max-width:640px){.ae .hide-n{display:none}}
+.ae .method{font-size:var(--cds-font-size-body);line-height:1.5}
+.ae .method li{margin:4px 0}
+.ae .chartbox{position:relative;min-height:300px}
+[data-dash-source-state=empty]{color:transparent}
+[data-dash-source-state=refreshing]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+.ae .fail{display:flex;align-items:center;justify-content:center;gap:6px;min-height:inherit;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.ae .fail::before{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+</style>
+
+<div class="ae">
+  <header id="top">
+    <h1>Lagos + Ogun estate land scan — value for money</h1>
+    <p class="sub dash-skeleton" id="takeaway" data-source="kpis" data-field="takeaway">—</p>
+  </header>
+
+  <section class="kpis" id="headline">
+    <div class="card kpi"><div class="lab">Estates with a published price</div><div class="val dash-skeleton" data-source="kpis" data-field="rated">—</div></div>
+    <div class="card kpi"><div class="lab">Median land price, ₦ per sqm</div><div class="val dash-skeleton" data-source="kpis" data-field="median_psqm">—</div></div>
+    <div class="card kpi"><div class="lab">With a C of O or Governor's consent claimed</div><div class="val dash-skeleton" data-source="kpis" data-field="strong_title">—</div></div>
+    <div class="card kpi"><div class="lab">In Ogun State</div><div class="val dash-skeleton" data-source="kpis" data-field="ogun_count">—</div></div>
+    <div class="card kpi"><div class="lab">Grade A to build in 1–3 years</div><div class="val dash-skeleton" data-source="kpis" data-field="build_a">—</div></div>
+    <div class="card kpi"><div class="lab">Grade A to hold 5+ years</div><div class="val dash-skeleton" data-source="kpis" data-field="hold_a">—</div></div>
+  </section>
+
+  <section class="card" id="filters">
+    <div class="bar">
+      <span class="modes" role="group" aria-label="Score for">
+        <button class="mode" data-m="build" aria-pressed="true">Build in 1–3 yrs</button>
+        <button class="mode" data-m="hold" aria-pressed="false">Hold 5+ yrs</button>
+      </span>
+      <select class="f-state" aria-label="State"><option value="">Lagos + Ogun</option><option>Lagos</option><option>Ogun</option></select>
+      <select class="f-corr" aria-label="Corridor"></select>
+      <select class="f-tier" aria-label="Price tier">
+        <option value="">All price tiers</option>
+        <option>Entry (under ₦10M)</option><option>Value (₦10–25M)</option><option>Mid (₦25–50M)</option><option>Upper (₦50–100M)</option><option>Premium (₦100M+)</option>
+      </select>
+      <span class="note" style="margin:0">Grade:</span>
+      <button class="chip" data-g="A" aria-pressed="false">A</button>
+      <button class="chip" data-g="B" aria-pressed="false">B</button>
+      <button class="chip" data-g="C" aria-pressed="false">C</button>
+      <button class="chip" data-g="D" aria-pressed="false">D</button>
+      <button class="chip" data-g="Not rated" aria-pressed="false">Not rated</button>
+      <button class="f-reset">Reset</button>
+      <span class="note f-count" style="margin:0"></span>
+    </div>
+  </section>
+
+  <section class="mapgrid" id="map-section">
+    <div class="card">
+      <h2 id="map">Where the estates are</h2>
+      <p class="note">Pins are placed at area level (±1–3 km), not plot boundaries. Squares are the three job hubs used for drive times; the dashed line is an approximate Lagos–Ogun boundary and the dotted line the coastal highway now being built. Click a pin for its scorecard; drag to pan, scroll or use +/− to zoom.</p>
+      <div class="mapbox" data-source="scored estates map_layers">
+        <div class="zoom"><button class="z-in" aria-label="Zoom in">+</button><button class="z-out" aria-label="Zoom out">−</button></div>
+        <div class="tip"></div>
+      </div>
+      <div class="legend gleg"></div>
+    </div>
+    <div class="card det" id="scorecard">
+      <h2>Estate scorecard</h2>
+      <p class="note">Click a pin, a dot or a table row.</p>
+      <div class="det-body"></div>
+    </div>
+  </section>
+
+  <section class="grid2" id="charts">
+    <div class="card">
+      <h2 id="value-chart">Score against price</h2>
+      <p class="note">Up and to the left is better value: a higher score for less per sqm. Price axis is logarithmic. Uses the score selected above.</p>
+      <div class="chartbox sc" data-source="scored"><div class="tip"></div></div>
+    </div>
+    <div class="card">
+      <h2 id="corridors">Corridors compared</h2>
+      <p class="note">Median land price per sqm among priced estates; label shows the average score (for the selected view) and estate count. Click a bar to filter.</p>
+      <div class="chartbox cb" data-source="by_corridor"></div>
+    </div>
+  </section>
+
+  <section class="card" id="ranking">
+    <h2>All estates, ranked</h2>
+    <p class="note">Reference plot = the plot size used for comparison (usually 500–650 sqm, a full Lagos plot). Click a header to sort.</p>
+    <div class="bar" style="margin-bottom:var(--cds-gap-sm)"><input type="search" class="q" placeholder="Search estate, developer, corridor" aria-label="Search"></div>
+    <div class="tblwrap">
+      <table class="tbl" data-source="scored" data-row-key="id">
+        <thead><tr>
+          <th data-field="name" data-k="name">Estate</th>
+          <th data-field="corridor" data-k="corridor" class="hide-n">Corridor</th>
+          <th data-field="state" data-k="state" class="hide-n">State</th>
+          <th data-field="tier" data-k="tier" class="hide-n">Tier</th>
+          <th data-field="ref_sqm" data-k="ref_sqm" class="num hide-n">Ref. plot</th>
+          <th data-field="ref_price" data-k="ref_price" class="num">Ref. price</th>
+          <th data-field="price_per_sqm" data-k="price_per_sqm" class="num">₦/sqm</th>
+          <th data-field="title" data-k="title" class="hide-n">Title claimed</th>
+          <th data-k="score" class="num th-score" aria-sort="descending">Build</th>
+          <th data-k="other" class="num hide-n th-other">Hold</th>
+          <th data-k="grade">Grade</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" id="market">
+    <h2>How much land is on offer, by area</h2>
+    <p class="note">All land listings on Nigeria Property Centre per area (estate and non-estate), with the portal's average asking price. Averages are pulled up by acre-sized and commercial parcels, so read them as market activity, not plot prices.</p>
+    <div class="chartbox mk" data-source="area_market"></div>
+  </section>
+
+  <section class="card method" id="method">
+    <h2>How the scores work</h2>
+    <p class="note" style="margin-bottom:0">Every estate gets two scores. Use the switch above to rank by either.</p>
+    <ul>
+      <li><b>Build in 1–3 years</b> = price 25% + title 25% + infrastructure 25% + access 15% + price transparency 10%.</li>
+      <li><b>Hold 5+ years</b> = price 30% + title 30% + growth catalysts 30% + price transparency 10%. Infrastructure and commute are left out, because a holder isn't moving in yet.</li>
+      <li><b>Price</b> — half how cheap the estate is per sqm against the median of its own corridor, half how cheap it is across Lagos and Ogun overall (log scale, ₦4,000/sqm = 100, ₦400,000/sqm = 0). Survey, deed or development fees that are quoted are added in. A price below 40% of its corridor median has its price score capped at 70, because prices that low usually hide extra fees, a weaker location or a title problem. Undated or expired prices are capped at 50.</li>
+      <li><b>Title</b> — the title the seller claims: Governor's consent or an individual Lagos C of O 90; Lagos state-scheme allocation (C of O) or Ogun C of O 85; estate global C of O 75; C of O with the issuer unclear 70; gazetted excision 60; excision with no gazette quoted 55; journalists' allocation letter 50; registered survey and deed 40 (45 with C of O 'in process'); receipt and survey 35; family receipt or deed only 30; none stated 25. None of these were verified at the Lagos Land Registry or the Ogun Bureau of Lands.</li>
+      <li><b>Infrastructure</b> — how ready the estate is to build in now: residents already living there, tarred roads, fence, power, water and drainage score high; advertised future amenities score low.</li>
+      <li><b>Access</b> — approximate off-peak drive to the nearest of three job hubs: Ikeja, Victoria Island/Lekki Phase 1, or the Lekki Free Trade Zone/Dangote refinery area. 10 minutes scores 100; each extra minute costs 1 point.</li>
+      <li><b>Growth catalysts</b> — corridor-level judgement of what can push land values up over 5–10 years: the refinery, deep-sea port, Free Trade Zone and proposed Lekki airport; the Lagos–Calabar coastal highway; the Lekki–Epe and Lagos–Ibadan expressway upgrades and rail; the Epe food hub; Sagamu interchange industry. Mature, built-out areas score lower here because less upside is left.</li>
+      <li><b>Price transparency</b> — recent, consistent prices with fees disclosed score high; promos, 'from' prices, expired offers and agents quoting different prices score low.</li>
+      <li><b>Grades</b> — A 68+, B 60–67, C 50–59, D under 50. Estates with no usable price are mapped but not rated.</li>
+      <li><b>Before paying anywhere</b> — in Lagos, get a lawyer to check the Official Gazette for the excision, run a search at the Land Registry (Alausa) on the estate's title, and check LASPPPA for setbacks and right-of-way (especially near the coastal highway and airport site). In Ogun, search at the Bureau of Lands, Abeokuta. Have your own surveyor confirm the plot sits inside the title, and get the full fee schedule (survey, deed, development levy, legal, agency 5%) in writing.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(() => {
+  dash.calc('scored', {
+    inputs: ['estates'],
+    title: 'Value-for-money scores',
+    description: 'Each estate scored 0–100 twice: to build within 1–3 years (price 25%, title 25%, infrastructure 25%, access 15%, transparency 10%) and to hold for 5+ years (price 30%, title 30%, growth catalysts 30%, transparency 10%).',
+    fn: (estates) => {
+      const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      const median = (a) => { const s = a.slice().sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+      const clamp = (v) => Math.max(0, Math.min(100, v));
+      const grade = (s) => s >= 68 ? 'A' : s >= 60 ? 'B' : s >= 50 ? 'C' : 'D';
+      const med = {};
+      for (const r of estates) { const p = num(r.price_per_sqm); if (p) (med[r.corridor] = med[r.corridor] || []).push(p); }
+      for (const k in med) med[k] = median(med[k]);
+      const tiers = [[10e6,'Entry (under ₦10M)'],[25e6,'Value (₦10–25M)'],[50e6,'Mid (₦25–50M)'],[100e6,'Upper (₦50–100M)'],[Infinity,'Premium (₦100M+)']];
+      return estates.map((r) => {
+        const p = num(r.price_per_sqm), price = num(r.ref_price);
+        const access = clamp(100 - (num(r.drive_min) - 10) * 1.0);
+        const base = { id: r.id, name: r.name, corridor: r.corridor, state: r.state, ref_sqm: num(r.ref_sqm), ref_price: price, price_per_sqm: p, title: r.title,
+          title_score: num(r.title_score), infra_score: num(r.infra_score), access_score: Math.round(access), growth_score: num(r.growth_score), transparency: num(r.transparency),
+          price_stale: r.price_stale === true || r.price_stale === 'true' || r.price_stale === 'True' };
+        if (!p) return { ...base, price_score: null, outlier: false, build_score: null, build_grade: 'Not rated', hold_score: null, hold_grade: 'Not rated', tier: 'No price' };
+        const rel = clamp(100 - (p / med[r.corridor] - 0.5) * 100);
+        const abs = clamp(100 * (Math.log(400000) - Math.log(p)) / (Math.log(400000) - Math.log(4000)));
+        const outlier = p < 0.4 * med[r.corridor];
+        let ps = (rel + abs) / 2;
+        if (outlier) ps = Math.min(ps, 70);
+        if (base.price_stale) ps = Math.min(ps, 50);
+        const b = Math.round((0.25 * ps + 0.25 * base.title_score + 0.25 * base.infra_score + 0.15 * access + 0.10 * base.transparency) * 10) / 10;
+        const h = Math.round((0.30 * ps + 0.30 * base.title_score + 0.30 * base.growth_score + 0.10 * base.transparency) * 10) / 10;
+        return { ...base, price_score: Math.round(ps), outlier, build_score: b, build_grade: grade(b), hold_score: h, hold_grade: grade(h), tier: tiers.find((t) => price < t[0])[1] };
+      });
+    },
+  });
+  dash.calc('kpis', {
+    inputs: ['scored'],
+    title: 'Headline figures',
+    description: 'Counts and the median price per sqm across estates with a published price.',
+    fn: (scored) => {
+      const rated = scored.filter((r) => r.build_score !== null);
+      const ps = rated.map((r) => r.price_per_sqm).sort((a, b) => a - b);
+      const m = Math.floor(ps.length / 2);
+      const median = Math.round(ps.length % 2 ? ps[m] : (ps[m - 1] + ps[m]) / 2);
+      const tb = rated.slice().sort((a, b) => b.build_score - a.build_score)[0];
+      const th = rated.slice().sort((a, b) => b.hold_score - a.hold_score)[0];
+      return [{ rated: rated.length, median_psqm: median, strong_title: rated.filter((r) => r.title_score >= 75).length, ogun_count: scored.filter((r) => r.state === 'Ogun').length,
+        build_a: rated.filter((r) => r.build_grade === 'A').length, hold_a: rated.filter((r) => r.hold_grade === 'A').length,
+        top_build: tb.name, top_build_score: tb.build_score, top_hold: th.name, top_hold_score: th.hold_score,
+        takeaway: `To build within 1–3 years, ${tb.name} scores highest (${tb.build_score}/100); built-up Sangotedo–Abijo and the cheaper titled estates along the Lagos–Ibadan expressway lead. To hold for 5+ years, ${th.name} leads (${th.hold_score}/100); the Free Trade Zone and airport belt of Ibeju-Lekki dominates, but it also carries the highest risk of government acquisition, so check every excision.` }];
+    },
+  });
+  dash.calc('by_corridor', {
+    inputs: ['scored'],
+    title: 'Corridor summary',
+    description: 'Median price per sqm, average build and hold scores and number of priced estates in each corridor.',
+    fn: (scored) => {
+      const g = {};
+      for (const r of scored) if (r.build_score !== null) (g[r.corridor] = g[r.corridor] || []).push(r);
+      const avg = (rs, k) => Math.round(rs.reduce((s, r) => s + r[k], 0) / rs.length * 10) / 10;
+      return Object.entries(g).map(([corridor, rs]) => {
+        const ps = rs.map((r) => r.price_per_sqm).sort((a, b) => a - b), m = Math.floor(ps.length / 2);
+        return { corridor, state: rs[0].state, n: rs.length, median_psqm: Math.round(ps.length % 2 ? ps[m] : (ps[m - 1] + ps[m]) / 2), avg_build: avg(rs, 'build_score'), avg_hold: avg(rs, 'hold_score') };
+      });
+    },
+  });
+
+  const GC = { A: '#1f9d6b', B: '#7cb342', C: '#d9a400', D: '#d9534f', 'Not rated': 'var(--cds-chart-muted)' };
+  const fmtN = (v) => v == null ? '—' : v >= 1e6 ? '₦' + (v / 1e6).toFixed(v >= 1e8 ? 0 : 1).replace(/\.0$/, '') + 'M' : '₦' + d3.format(',')(v);
+  const fmtS = (v) => v == null ? '—' : '₦' + d3.format(',')(v);
+  const st = { mode: 'build', state: '', corr: '', tier: '', grades: new Set(), q: '', sel: null, sort: ['score', -1] };
+  try { const m = localStorage.getItem('lagosScanMode'); if (m === 'hold' || m === 'build') st.mode = m; } catch (e) {}
+  const $ = (s) => document.querySelector('.ae ' + s);
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  let raw = [], rows = [], byId = {}, est = {};
+  const view = () => { rows = raw.map((r) => ({ ...r, score: st.mode === 'build' ? r.build_score : r.hold_score, grade: st.mode === 'build' ? r.build_grade : r.hold_grade, other: st.mode === 'build' ? r.hold_score : r.build_score })); byId = Object.fromEntries(rows.map((r) => [r.id, r])); };
+  const modeLabel = () => st.mode === 'build' ? 'Build' : 'Hold';
+
+  const visible = () => rows.filter((r) => (!st.state || r.state === st.state) && (!st.corr || r.corridor === st.corr) && (!st.tier || r.tier === st.tier) && (!st.grades.size || st.grades.has(r.grade))
+    && (!st.q || (r.name + ' ' + r.corridor + ' ' + (est[r.id]?.developer || '')).toLowerCase().includes(st.q)));
+
+  // controls
+  const corrSel = $('.f-corr'), tierSel = $('.f-tier'), stateSel = $('.f-state');
+  const syncModeUi = () => {
+    document.querySelectorAll('.ae .mode').forEach((b) => b.setAttribute('aria-pressed', b.dataset.m === st.mode));
+    $('.th-score').textContent = st.mode === 'build' ? 'Build' : 'Hold'; $('.th-other').textContent = st.mode === 'build' ? 'Hold' : 'Build';
+  };
+  const setMode = (m) => { st.mode = m; try { localStorage.setItem('lagosScanMode', m); } catch (e) {} syncModeUi(); if (raw.length) { view(); drawAll(); } };
+  document.querySelectorAll('.ae .mode').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.m)));
+  stateSel.addEventListener('change', () => { st.state = stateSel.value; drawAll(); });
+  corrSel.addEventListener('change', () => { st.corr = corrSel.value; drawAll(); });
+  tierSel.addEventListener('change', () => { st.tier = tierSel.value; drawAll(); });
+  document.querySelectorAll('.ae .chip').forEach((b) => b.addEventListener('click', () => {
+    const g = b.dataset.g; st.grades.has(g) ? st.grades.delete(g) : st.grades.add(g); b.setAttribute('aria-pressed', st.grades.has(g)); drawAll();
+  }));
+  $('.f-reset').addEventListener('click', () => { st.state = ''; stateSel.value = ''; st.corr = ''; st.tier = ''; st.grades.clear(); st.q = ''; $('.q').value = ''; corrSel.value = ''; tierSel.value = '';
+    document.querySelectorAll('.ae .chip').forEach((b) => b.setAttribute('aria-pressed', 'false')); resetZoom(); drawAll(); });
+  $('.q').addEventListener('input', (e) => { st.q = e.target.value.trim().toLowerCase(); drawAll(); });
+  const select = (id) => { st.sel = id; drawAll(); };
+
+  // legend
+  const gleg = $('.gleg');
+  for (const [g, c] of Object.entries(GC)) { const s = el('span'); const sw = el('span', 'sw'); sw.style.background = c; s.append(sw, g === 'Not rated' ? 'No usable price' : 'Grade ' + g); gleg.append(s); }
+
+  // ---------- map ----------
+  const mapbox = $('.mapbox'), mtip = mapbox.querySelector('.tip');
+  let zoom, svgSel, gSel, curK = 1;
+  const resetZoom = () => { if (svgSel && zoom) svgSel.call(zoom.transform, d3.zoomIdentity); };
+  $('.z-in').addEventListener('click', () => svgSel && svgSel.transition().call(zoom.scaleBy, 1.6));
+  $('.z-out').addEventListener('click', () => svgSel && svgSel.transition().call(zoom.scaleBy, 1 / 1.6));
+  let lastT = d3.zoomIdentity;
+  function drawMap(layers) {
+    const w = mapbox.clientWidth || 600, h = Math.max(300, Math.min(560, w * 0.5));
+    mapbox.style.minHeight = h + 'px';
+    const kx = Math.cos(6.6 * Math.PI / 180), lon0 = 2.78, lon1 = 4.10, lat0 = 6.38, lat1 = 6.92;
+    const sx = (w - 24) / ((lon1 - lon0) * kx), sy = (h - 24) / (lat1 - lat0), s = Math.min(sx, sy);
+    const ox = (w - (lon1 - lon0) * kx * s) / 2, oy = (h - (lat1 - lat0) * s) / 2;
+    const P = (lat, lng) => [ox + (lng - lon0) * kx * s, oy + (lat1 - lat) * s];
+    d3.select(mapbox).select('svg').remove();
+    svgSel = d3.select(mapbox).insert('svg', ':first-child').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Map of estates across Lagos and the Ogun commuter belt');
+    gSel = svgSel.append('g');
+    const parse = (p) => p.split(';').map((q) => q.split(',').map(Number));
+    for (const c of layers.filter((l) => l.kind === 'coast')) {
+      const pts = parse(c.path).map(([a, b]) => P(a, b));
+      gSel.append('path').attr('class', 'coast').attr('d', d3.line().curve(d3.curveCatmullRom)(pts));
+      const q = pts[Math.floor(pts.length * 0.3)]; gSel.append('text').attr('class', 'coastlab').attr('x', q[0]).attr('y', q[1] + 14).text(c.name);
+    }
+    for (const r of layers.filter((l) => l.kind === 'road' || l.kind === 'planned')) {
+      const pts = parse(r.path).map(([a, b]) => P(a, b));
+      gSel.append('path').attr('class', r.kind).attr('d', d3.line()(pts));
+      const mid = pts[Math.min(pts.length - 1, Math.floor(pts.length * (r.lab == null ? 0.5 : +r.lab)))];
+      gSel.append('text').attr('class', 'roadlab').attr('x', mid[0] + 4).attr('y', mid[1] + (r.kind === 'planned' ? 12 : -4)).text(r.name);
+    }
+    for (const b of layers.filter((l) => l.kind === 'border')) {
+      const pts = parse(b.path).map(([a, c]) => P(a, c));
+      gSel.append('path').attr('class', 'border').attr('d', d3.line()(pts));
+      const q = pts[2]; gSel.append('text').attr('class', 'borderlab').attr('x', q[0] + 4).attr('y', q[1] - 6).text(b.name);
+    }
+    const pinG = gSel.append('g');
+    const placeG = gSel.append('g');
+    for (const p of layers.filter((l) => l.kind === 'place')) {
+      const [x, y] = P(...parse(p.path)[0]);
+      placeG.append('circle').attr('class', 'placedot').attr('cx', x).attr('cy', y).attr('r', 2.5);
+      const right = parse(p.path)[0][1] > 3.85; placeG.append('text').attr('class', 'place').attr('x', right ? x - 5 : x + 5).attr('y', y - 5).attr('text-anchor', right ? 'end' : 'start').text(p.name);
+    }
+    for (const p of layers.filter((l) => l.kind === 'hub')) {
+      const [x, y] = P(...parse(p.path)[0]);
+      placeG.append('rect').attr('class', 'hubmk').attr('x', x - 4).attr('y', y - 4).attr('width', 8).attr('height', 8).attr('data-x', x).attr('data-y', y);
+      const right = parse(p.path)[0][1] > 3.85; placeG.append('text').attr('class', 'hublab').attr('x', right ? x - 7 : x + 7).attr('y', y + 14).attr('text-anchor', right ? 'end' : 'start').text(p.name);
+    }
+    const vis = new Set(visible().map((r) => r.id));
+    const data = rows.slice().sort((a, b) => (a.id === st.sel) - (b.id === st.sel));
+    pinG.selectAll('circle').data(data).join('circle')
+      .attr('class', (d) => 'pin' + (d.id === st.sel ? ' sel' : ''))
+      .attr('cx', (d) => P(est[d.id].lat, est[d.id].lng)[0]).attr('cy', (d) => P(est[d.id].lat, est[d.id].lng)[1])
+      .attr('fill', (d) => GC[d.grade]).attr('opacity', (d) => vis.has(d.id) ? 1 : 0.12)
+      .style('pointer-events', (d) => vis.has(d.id) ? 'auto' : 'none')
+      .on('mousemove', (ev, d) => {
+        const [mx, my] = d3.pointer(ev, mapbox);
+        mtip.replaceChildren(el('div', null, d.name), el('div', 't2', d.score == null ? 'No usable price' : `${modeLabel()}: grade ${d.grade} · ${d.score}/100 · ${fmtS(d.price_per_sqm)}/sqm`));
+        mtip.style.display = 'block';
+        mtip.style.left = Math.min(mx + 12, mapbox.clientWidth - 250) + 'px'; mtip.style.top = (my + 12) + 'px';
+      })
+      .on('mouseleave', () => { mtip.style.display = 'none'; })
+      .on('click', (ev, d) => select(d.id));
+    const sizePins = (k) => pinG.selectAll('circle').attr('r', (d) => (d.id === st.sel ? 8 : 5) / k).attr('stroke-width', (d) => (d.id === st.sel ? 2.5 : 1) / k);
+    const sizeText = (k) => {
+      gSel.selectAll('text').style('font-size', (_, i, n) => (n[i].classList.contains('place') || n[i].classList.contains('hublab') ? 11 : 10) / k + 'px').style('stroke-width', 3 / k + 'px');
+      placeG.selectAll('circle').attr('r', 2.5 / k);
+      placeG.selectAll('rect').each(function () { const x = +this.dataset.x, y = +this.dataset.y, z = 8 / k; d3.select(this).attr('x', x - z / 2).attr('y', y - z / 2).attr('width', z).attr('height', z).style('stroke-width', 1.5 / k); });
+      gSel.selectAll('.road').style('stroke-width', 3 / k); gSel.selectAll('.planned').style('stroke-width', 2 / k).style('stroke-dasharray', `${2 / k} ${4 / k}`);
+      gSel.selectAll('.coast').style('stroke-width', 1 / k);
+      gSel.selectAll('.border').style('stroke-width', 1.5 / k).style('stroke-dasharray', `${6 / k} ${4 / k}`); };
+    zoom = d3.zoom().scaleExtent([1, 14]).translateExtent([[0, 0], [w, h]]).on('zoom', (ev) => { lastT = ev.transform; curK = ev.transform.k; gSel.attr('transform', ev.transform); sizePins(curK); sizeText(curK); });
+    svgSel.call(zoom).on('dblclick.zoom', null);
+    svgSel.call(zoom.transform, lastT);
+    sizePins(curK); sizeText(curK);
+  }
+
+  // ---------- scorecard ----------
+  const det = $('.det-body');
+  function drawDetail() {
+    det.replaceChildren();
+    const r = byId[st.sel]; if (!r) { det.append(el('p', 'note', 'No estate selected yet.')); return; }
+    const e = est[r.id];
+    det.append(el('h3', null, r.name));
+    det.append(el('div', 'meta', `${r.corridor} · ${r.state} · ${e.developer}`));
+    const big = el('div', 'big');
+    const sc = el('span', 'score', r.score == null ? 'Not rated' : String(r.score));
+    sc.setAttribute('data-source', 'scored'); sc.setAttribute('data-field', st.mode + '_score'); sc.setAttribute('data-where', 'id=' + encodeURIComponent(r.id));
+    const b = el('span', 'badge', r.grade === 'Not rated' ? 'No price' : modeLabel() + ' · grade ' + r.grade); b.style.background = GC[r.grade];
+    big.append(sc, r.score == null ? '' : el('span', 'note', '/ 100'), b);
+    if (r.score != null) big.append(el('span', 'other', `${st.mode === 'build' ? 'Hold' : 'Build'} score ${r.other} (${st.mode === 'build' ? r.hold_grade : r.build_grade})`));
+    det.append(big);
+    const dl = el('dl', 'facts');
+    const add = (k, v, src, field) => { const dd = el('dd', null, v); if (src) { dd.setAttribute('data-source', src); dd.setAttribute('data-field', field); dd.setAttribute('data-where', 'id=' + encodeURIComponent(r.id)); } dl.append(el('dt', null, k), dd); };
+    add('Reference plot', r.ref_sqm ? r.ref_sqm + ' sqm for ' + fmtN(r.ref_price) : '—');
+    add('Price per sqm', fmtS(r.price_per_sqm), 'scored', 'price_per_sqm');
+    add('Price tier', r.tier, 'scored', 'tier');
+    add('Plot prices', e.plot_prices, 'estates', 'plot_prices');
+    add('Title claimed', r.title, 'estates', 'title');
+    if (e.infra_note) add('On the ground', e.infra_note, 'estates', 'infra_note');
+    add('Nearest job hub', `~${e.drive_min} min off-peak to ${e.hub}`);
+    add('Growth outlook', e.growth_note, 'estates', 'growth_note');
+    det.append(dl);
+    if (r.score != null) {
+      const comps = st.mode === 'build'
+        ? [['Price (25%)', r.price_score, 'price_score'], ['Title (25%)', r.title_score, 'title_score'], ['Infrastructure (25%)', r.infra_score, 'infra_score'], ['Access (15%)', r.access_score, 'access_score'], ['Transparency (10%)', r.transparency, 'transparency']]
+        : [['Price (30%)', r.price_score, 'price_score'], ['Title (30%)', r.title_score, 'title_score'], ['Growth (30%)', r.growth_score, 'growth_score'], ['Transparency (10%)', r.transparency, 'transparency']];
+      for (const [lab, v, f] of comps) {
+        const row = el('div', 'comp'); const tr = el('div', 'track'); const fi = el('div', 'fill');
+        fi.style.width = v + '%'; fi.style.background = v >= 70 ? GC.A : v >= 50 ? GC.C : GC.D; tr.append(fi);
+        const n = el('span', null, String(v)); n.setAttribute('data-source', 'scored'); n.setAttribute('data-field', f); n.setAttribute('data-where', 'id=' + encodeURIComponent(r.id));
+        row.append(el('span', null, lab), tr, n); det.append(row);
+      }
+    }
+    if (r.price_stale) det.append(el('div', 'flag', '⏱ Price is undated or the offer has expired, so its price score is capped at 50.'));
+    if (r.outlier) det.append(el('div', 'flag', '⚑ Priced below 40% of its corridor median. Its price score is capped at 70 until you confirm what the price covers.'));
+    if (r.corridor.startsWith('Ibeju-Lekki')) det.append(el('div', 'flag', 'ⓘ Much of Ibeju-Lekki was under Lagos State acquisition. Confirm the excision in the Official Gazette for this exact plot, and check LASPPPA for the airport and coastal-highway setbacks.'));
+    if (r.state === 'Ogun') det.append(el('div', 'flag', 'ⓘ Ogun State land: search the title at the Ogun State Bureau of Lands (Abeokuta), not the Lagos Land Registry.'));
+    if (e.flags) det.append(el('div', 'flag', '⚠ ' + e.flags));
+    const src = el('p', 'note'); const a = el('a', null, e.source); a.href = e.source_url; a.target = '_blank'; a.rel = 'noopener';
+    src.append('Source: ', a, e.source_date ? ' (' + e.source_date + ')' : ' (undated)'); det.append(src);
+  }
+
+  // ---------- scatter ----------
+  const scBox = $('.sc'), stip = scBox.querySelector('.tip');
+  function drawScatter() {
+    d3.select(scBox).select('svg').remove();
+    const data = visible().filter((r) => r.score != null);
+    const w = scBox.clientWidth || 400, h = 300, m = { t: 10, r: 14, b: 34, l: 36 };
+    const svg = d3.select(scBox).insert('svg', ':first-child').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const x = d3.scaleLog([2500, 450000], [m.l, w - m.r]), y = d3.scaleLinear([25, 85], [h - m.b, m.t]);
+    const xa = svg.append('g').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickValues([5000, 10000, 25000, 50000, 100000, 250000]).tickFormat((v) => '₦' + d3.format('~s')(v)).tickSizeOuter(0));
+    const ya = svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickSize(-(w - m.l - m.r)));
+    [xa, ya].forEach((a) => { a.attr('font-size', null).attr('font-family', null); a.selectAll('text').attr('fill', 'var(--color-fg-muted)').style('font-size', '11px'); a.select('.domain').attr('stroke', 'var(--cds-chart-axis)'); a.selectAll('line').attr('stroke', 'var(--cds-chart-grid)'); });
+    ya.select('.domain').remove();
+    svg.append('text').attr('x', w - m.r).attr('y', h - 4).attr('text-anchor', 'end').attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text('₦ per sqm →');
+    svg.append('text').attr('x', m.l + 4).attr('y', m.t + 10).attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text(modeLabel() + ' score ↑');
+    svg.append('g').selectAll('circle').data(data).join('circle')
+      .attr('cx', (d) => x(Math.min(450000, Math.max(2500, d.price_per_sqm)))).attr('cy', (d) => y(Math.max(25, d.score))).attr('r', (d) => d.id === st.sel ? 8 : 5.5)
+      .attr('fill', (d) => GC[d.grade]).attr('stroke', (d) => d.id === st.sel ? 'var(--color-fg)' : 'var(--color-panel)').attr('stroke-width', (d) => d.id === st.sel ? 2.5 : 1).style('cursor', 'pointer')
+      .on('mousemove', (ev, d) => { const [mx, my] = d3.pointer(ev, scBox); stip.replaceChildren(el('div', 't2', d.corridor), el('div', null, d.name), el('div', null, `${d.score}/100 · ${fmtS(d.price_per_sqm)}/sqm`)); stip.style.display = 'block'; stip.style.left = Math.min(mx + 12, w - 250) + 'px'; stip.style.top = (my + 12) + 'px'; })
+      .on('mouseleave', () => { stip.style.display = 'none'; })
+      .on('click', (ev, d) => select(d.id));
+  }
+
+  // ---------- corridor bars ----------
+  const cbBox = $('.cb');
+  function drawCorr(data) {
+    d3.select(cbBox).select('svg').remove();
+    data = data.slice().sort((a, b) => b.median_psqm - a.median_psqm);
+    const w = cbBox.clientWidth || 400, rowH = 30, m = { t: 4, r: 112, b: 4, l: 10 };
+    const h = m.t + m.b + rowH * data.length; cbBox.style.minHeight = h + 'px';
+    const svg = d3.select(cbBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const short = (c) => w < 560 ? c.replace(/\s*\(.*\)/, '') : c;
+    const tmp = svg.append('text').style('font-size', '12px').text('');
+    const labW = d3.max(data, (d) => { tmp.text(short(d.corridor)); return tmp.node().getComputedTextLength(); }) + 10; tmp.remove();
+    const x = d3.scaleLinear([0, d3.max(data, (d) => d.median_psqm)], [m.l + labW, w - m.r]);
+    const g = svg.selectAll('g').data(data).join('g').attr('transform', (d, i) => `translate(0,${m.t + i * rowH})`).style('cursor', 'pointer')
+      .on('click', (ev, d) => { st.corr = st.corr === d.corridor ? '' : d.corridor; corrSel.value = st.corr; drawAll(); });
+    g.append('title').text((d) => d.corridor);
+    g.append('text').attr('x', m.l).attr('y', rowH / 2 + 4).style('font-size', '12px').attr('fill', 'var(--color-fg)').text((d) => short(d.corridor));
+    g.append('rect').attr('x', x(0)).attr('y', 7).attr('height', rowH - 14).attr('rx', 4).attr('width', (d) => Math.max(2, x(d.median_psqm) - x(0)))
+      .attr('fill', (d) => !st.corr || st.corr === d.corridor ? dash.colors[0] : 'var(--cds-chart-muted)');
+    g.append('text').attr('x', (d) => x(d.median_psqm) + 6).attr('y', rowH / 2 + 4).style('font-size', '11px').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => `${fmtS(d.median_psqm)} · ${st.mode === 'build' ? d.avg_build : d.avg_hold} · ${d.n}`);
+  }
+
+  // ---------- market bars ----------
+  const mkBox = $('.mk');
+  function drawMarket(data) {
+    d3.select(mkBox).select('svg').remove();
+    data = data.slice().sort((a, b) => b.listings - a.listings);
+    const w = mkBox.clientWidth || 400, rowH = 28, m = { t: 4, r: 10, b: 4, l: 10 };
+    const narrow = w < 560;
+    const labW = narrow ? 125 : 170, txtW = narrow ? 105 : 220;
+    const h = m.t + m.b + rowH * data.length; mkBox.style.minHeight = h + 'px';
+    const svg = d3.select(mkBox).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`);
+    const x = d3.scaleLinear([0, d3.max(data, (d) => d.listings)], [m.l + labW, w - m.r - txtW]);
+    const g = svg.selectAll('g').data(data).join('g').attr('transform', (d, i) => `translate(0,${m.t + i * rowH})`);
+    g.append('text').attr('x', m.l).attr('y', rowH / 2 + 4).style('font-size', '12px').attr('fill', 'var(--color-fg)').text((d) => d.area);
+    g.append('rect').attr('x', x(0)).attr('y', 7).attr('height', rowH - 14).attr('rx', 4).attr('width', (d) => Math.max(2, x(d.listings) - x(0))).attr('fill', dash.colors[1]);
+    const avgTxt = (d) => d.avg_price == null || d.avg_price === '' ? (narrow ? 'no avg' : 'no usable avg') : 'avg ' + fmtN(Number(d.avg_price));
+    g.append('text').attr('x', (d) => x(d.listings) + 6).attr('y', rowH / 2 + 4).style('font-size', '11px').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => narrow ? `${d.listings} · ${avgTxt(d)}` : `${d.listings} listings · ${avgTxt(d)} · ${d.as_of}`);
+  }
+
+  // ---------- table ----------
+  const tbody = $('.tbl tbody');
+  document.querySelectorAll('.ae .tbl th').forEach((th) => th.addEventListener('click', () => {
+    const k = th.dataset.k; st.sort = [k, st.sort[0] === k ? -st.sort[1] : (['name', 'corridor', 'state', 'tier', 'title', 'grade'].includes(k) ? 1 : -1)];
+    document.querySelectorAll('.ae .tbl th').forEach((t) => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', st.sort[1] > 0 ? 'ascending' : 'descending'); drawTable();
+  }));
+  tbody.addEventListener('click', (ev) => { const tr = ev.target.closest('tr[data-key]'); if (tr) { select(tr.dataset.key); document.getElementById('map').scrollIntoView({ behavior: 'smooth' }); } });
+  function drawTable() {
+    const [k, dir] = st.sort;
+    const data = visible().slice().sort((a, b) => { const va = a[k], vb = b[k]; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb))) * dir; });
+    tbody.replaceChildren(...data.map((r) => {
+      const tr = el('tr', r.id === st.sel ? 'sel' : ''); tr.dataset.key = r.id;
+      const gtd = el('td'); const b = el('span', 'badge', r.grade === 'Not rated' ? '—' : r.grade); b.style.background = GC[r.grade]; gtd.append(b);
+      tr.append(el('td', null, r.name), el('td', 'hide-n', r.corridor), el('td', 'hide-n', r.state), el('td', 'hide-n', r.tier), el('td', 'num hide-n', r.ref_sqm ? r.ref_sqm + ' sqm' : '—'),
+        el('td', 'num', fmtN(r.ref_price)), el('td', 'num', fmtS(r.price_per_sqm)), el('td', 'hide-n', r.title), el('td', 'num', r.score == null ? '—' : String(r.score)), el('td', 'num hide-n', r.other == null ? '—' : String(r.other)), gtd);
+      return tr;
+    }));
+  }
+
+  // ---------- orchestration ----------
+  let layers = [], corrData = [];
+  function drawAll() {
+    const n = visible().length; $('.f-count').textContent = `${n} of ${rows.length} estates shown`;
+    if (layers.length) drawMap(layers);
+    drawDetail(); drawScatter(); if (corrData.length) drawCorr(corrData); drawTable();
+  }
+  const fail = (box) => { d3.select(box).select('svg').remove(); if (!box.querySelector('.fail')) box.append(el('div', 'fail', 'Failed to load')); };
+  syncModeUi();
+
+  dash.onData(() => {
+    const s = dash.data('scored'), e = dash.data('estates'), l = dash.data('map_layers'), c = dash.data('by_corridor'), mk = dash.data('area_market'), kp = dash.data('kpis');
+    document.querySelectorAll('.ae [data-source=kpis]').forEach((n) => {
+      if (kp.status === 'ok' && kp.data.length) {
+        n.classList.remove('dash-skeleton'); const v = kp.data[0][n.dataset.field];
+        n.textContent = n.dataset.field === 'median_psqm' ? fmtS(v) : String(v);
+      } else if (kp.status === 'error') { n.classList.remove('dash-skeleton'); n.textContent = '—'; }
+    });
+    if (s.status === 'ok' && e.status === 'ok') {
+      raw = s.data; est = Object.fromEntries(e.data.map((r) => [r.id, r])); view();
+      if (!st.sel) st.sel = rows.filter((r) => r.score != null).sort((a, b) => b.score - a.score)[0]?.id;
+      const corrs = [...new Set(rows.map((r) => r.corridor))].sort();
+      corrSel.replaceChildren(new Option('All corridors', ''), ...corrs.map((c) => new Option(c, c))); corrSel.value = st.corr;
+      tierSel.value = st.tier;
+    }
+    layers = l.status === 'ok' ? l.data : [];
+    corrData = c.status === 'ok' ? c.data : [];
+    if (s.status === 'error' || e.status === 'error') { fail(mapbox); fail(scBox); }
+    if (l.status === 'error') fail(mapbox);
+    if (c.status === 'error') fail(cbBox);
+    if (rows.length) drawAll();
+    if (mk.status === 'ok') drawMarket(mk.data); else if (mk.status === 'error') fail(mkBox);
+  });
+
+  const named = document.getElementById(location.hash.slice(1)); if (named) named.scrollIntoView();
+})();
+</script>
+
+</div>
+<script>
+(() => {
+  const info = document.getElementById('saInfo'), box = document.getElementById('saLoad'), pick = document.getElementById('saPick');
+  document.addEventListener('sa-loaded', (e) => { info.textContent = `${e.detail.count} estates from estates.csv`; box.hidden = true; });
+  pick.addEventListener('change', async () => {
+    let csv = null, layers = window.dash.data('map_layers').data || [], market = window.dash.data('area_market').data || [];
+    for (const f of pick.files) {
+      const t = await f.text();
+      if (/\.csv$/i.test(f.name)) csv = t;
+      else if (/map_layers/i.test(f.name)) layers = JSON.parse(t);
+      else if (/area_market/i.test(f.name)) market = JSON.parse(t);
+    }
+    if (csv) window.dash.setData(csv, layers, market); else info.textContent = 'Pick estates.csv as well.';
+  });
+  window.dash.loadFromUrls().then((ok) => { if (!ok) { box.hidden = false; info.textContent = 'Data not loaded'; } });
+})();
+</script>
+</body>
+</html>

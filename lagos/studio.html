@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Plot-to-Home Studio – Lagos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+html,body{margin:0}[hidden]{display:none!important}
+
+/* Layout: drafting-board console — step rail left, working sheet centre, running quote pinned right; stacks on phones with the quote as a bottom bar. */
+:root{
+  --paper:#eef1ee; --sheet:#fbfcfa; --ink:#1d2a2b; --ink-2:#4c5b5c; --rule:#cdd6d2; --rule-2:#e2e8e5;
+  --granite:#2f4a47; --granite-soft:#dbe6e3; --sun:#c98a12; --sun-soft:#f6e7c6; --leaf:#3f7d4e; --leaf-soft:#dcebdf; --warn:#a4481f; --warn-soft:#f5e0d6; --plum:#7a5aa6; --sky:#3f7fa8;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#131a1a; --sheet:#1a2323; --ink:#e3ebe8; --ink-2:#9fb0ad; --rule:#33413f; --rule-2:#26302f;
+  --granite:#8fc1b8; --granite-soft:#22383a; --sun:#e2a93c; --sun-soft:#3a2f17; --leaf:#7cc28c; --leaf-soft:#1f3326; --warn:#e58a62; --warn-soft:#3b241b; --plum:#b49ae0; --sky:#7fb7dc; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#131a1a; --sheet:#1a2323; --ink:#e3ebe8; --ink-2:#9fb0ad; --rule:#33413f; --rule-2:#26302f;
+  --granite:#8fc1b8; --granite-soft:#22383a; --sun:#e2a93c; --sun-soft:#3a2f17; --leaf:#7cc28c; --leaf-soft:#1f3326; --warn:#e58a62; --warn-soft:#3b241b; --plum:#b49ae0; --sky:#7fb7dc; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+*{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:13.5rem minmax(0,1fr) 21rem;gap:0;min-height:100%}
+/* top bar */
+.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;padding:12px 20px;border-bottom:1px solid var(--rule);background:var(--sheet)}
+.brand{font-family:var(--f-display);font-weight:700;font-size:1.15rem;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.brand .mk{width:22px;height:22px;border:2px solid var(--granite);border-radius:3px;position:relative}
+.brand .mk::after{content:"";position:absolute;inset:4px 4px auto auto;width:8px;height:8px;background:var(--sun);border-radius:50%}
+.top .grow{flex:1}
+.sess{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status{font-family:var(--f-mono);font-size:.78rem;color:var(--ink-2);max-width:20rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{border:1px solid var(--rule);background:var(--sheet);padding:7px 12px;border-radius:var(--r);cursor:pointer;font-size:.88rem}
+.btn:hover{border-color:var(--granite)}
+.btn.primary{background:var(--granite);border-color:var(--granite);color:var(--sheet)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,.step:focus-visible,.chip:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+select,input[type=text],input[type=number],textarea{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:7px 9px;min-width:0}
+/* rail */
+.rail{padding:20px 14px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:4px}
+.step{display:grid;grid-template-columns:1.8rem 1fr;align-items:center;gap:6px;text-align:left;border:0;background:none;padding:9px 8px;border-radius:var(--r);cursor:pointer;color:var(--ink-2)}
+.step .n{font-family:var(--f-mono);font-size:.8rem;border:1px solid var(--rule);border-radius:50%;width:1.6rem;height:1.6rem;display:grid;place-items:center}
+.step[aria-current=true]{background:var(--granite-soft);color:var(--ink)}
+.step[aria-current=true] .n{background:var(--granite);color:var(--sheet);border-color:var(--granite)}
+.rail .hint{margin-top:auto;font-size:.78rem;color:var(--ink-2);padding:8px}
+/* main sheet */
+.main{padding:24px clamp(16px,3vw,36px) 120px;min-width:0}
+.panel{display:none;max-width:56rem}
+.panel.on{display:block}
+h1,h2,h3{font-family:var(--f-display);letter-spacing:-.01em;text-wrap:balance;margin:0}
+h2{font-size:1.6rem;font-weight:700}
+.lede{color:var(--ink-2);margin:6px 0 20px;max-width:60ch}
+.tag{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:14px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font-size:.82rem;color:var(--ink-2)}
+.block{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:16px;margin-top:16px}
+.block h3{font-size:1.05rem;font-weight:700;margin-bottom:10px}
+/* style cards */
+.styles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:12px}
+.style{border:1px solid var(--rule);border-radius:var(--r);background:var(--sheet);padding:12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.style[aria-pressed=true]{border-color:var(--granite);box-shadow:0 0 0 2px var(--granite) inset}
+.swatches{display:flex;height:34px;border-radius:4px;overflow:hidden}
+.swatches span{flex:1}
+.style b{font-family:var(--f-display);font-size:1rem}
+.style small{color:var(--ink-2);font-size:.8rem}
+/* finish table */
+.rows{display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,2fr) 7.5rem;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule-2)}
+.row:last-child{border-bottom:0}
+.row .nm b{display:block;font-weight:600}
+.row .nm small{color:var(--ink-2);font-size:.8rem}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--rule);background:var(--sheet);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.85rem}
+.chip[aria-pressed=true]{background:var(--granite);border-color:var(--granite);color:var(--sheet)}
+.amt{font-family:var(--f-mono);font-size:.88rem;text-align:right;font-variant-numeric:tabular-nums}
+.qty{display:flex;align-items:center;gap:6px}
+.qty input{width:6rem}
+.qty span{font-size:.8rem;color:var(--ink-2)}
+@media (max-width:640px){.row{grid-template-columns:1fr;gap:6px}.amt{text-align:left}}
+/* energy */
+.applist{width:100%;border-collapse:collapse;font-size:.88rem}
+.applist th{font-weight:500;color:var(--ink-2);text-align:left;font-size:.78rem;padding:4px 6px;border-bottom:1px solid var(--rule)}
+.applist td{padding:4px 6px;border-bottom:1px solid var(--rule-2)}
+.applist input{width:100%;min-width:3.5rem}
+.applist td.k{font-family:var(--f-mono);text-align:right;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:12px;margin-top:14px}
+.metric{border-left:3px solid var(--sun);padding:4px 10px}
+.metric .v{font-family:var(--f-display);font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.metric .l{font-size:.78rem;color:var(--ink-2)}
+.chart{margin-top:14px}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.range{display:flex;align-items:center;gap:10px}
+.range input{flex:1}
+.range output{font-family:var(--f-mono);min-width:4.5rem;text-align:right}
+.note{font-size:.8rem;color:var(--ink-2)}
+.check{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--rule-2)}
+.check:last-child{border-bottom:0}
+.check input{margin-top:4px}
+.check div{flex:1;min-width:0}
+.check small{display:block;color:var(--ink-2);font-size:.8rem}
+/* quote panel */
+.quote{border-left:1px solid var(--rule);background:var(--sheet);padding:20px 18px 40px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);align-self:start;max-height:calc(100vh - 24px);overflow:auto}
+.quote h3{font-size:.95rem;font-weight:700}
+.client{font-family:var(--f-display);font-size:1.25rem;font-weight:700;margin:2px 0 0}
+.estate{color:var(--ink-2);font-size:.85rem}
+.total{font-family:var(--f-display);font-size:2.1rem;font-weight:700;margin:14px 0 2px;font-variant-numeric:tabular-nums}
+.budgetbar{height:10px;border-radius:5px;background:var(--rule-2);position:relative;overflow:hidden;margin:6px 0 4px}
+.budgetbar span{position:absolute;inset:0 auto 0 0;background:var(--leaf);border-radius:5px}
+.budgetbar.over span{background:var(--warn)}
+.lines{margin-top:14px;display:flex;flex-direction:column;gap:2px}
+.line{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:.88rem;padding:5px 0;border-bottom:1px dashed var(--rule-2)}
+.line .a{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.stack{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:12px;background:var(--rule-2)}
+.stack span{display:block;height:100%}
+.pill{display:inline-block;font-size:.75rem;padding:2px 8px;border-radius:999px;background:var(--sun-soft);color:var(--ink)}
+.pill.ok{background:var(--leaf-soft)}
+.pill.bad{background:var(--warn-soft)}
+.banner{background:var(--sun-soft);border:1px solid var(--sun);border-radius:var(--r);padding:10px 12px;font-size:.85rem;margin-bottom:16px}
+.banner.bad{background:var(--warn-soft);border-color:var(--warn)}
+.qactions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+/* rates drawer */
+dialog{border:1px solid var(--rule);border-radius:10px;background:var(--sheet);color:var(--ink);padding:0;width:min(46rem,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog::backdrop{background:rgba(10,20,20,.45)}
+.dlg-h{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--sheet)}
+.dlg-b{padding:8px 18px 18px;overflow:auto}
+.rate{display:grid;grid-template-columns:minmax(0,1fr) 9rem;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--rule-2)}
+.rate span{font-size:.88rem}
+.rate small{color:var(--ink-2);display:block;font-size:.76rem}
+.rate input{text-align:right;font-family:var(--f-mono)}
+.rgroup{margin-top:14px}
+.rgroup h4{margin:0 0 4px;font-family:var(--f-display);font-size:.95rem}
+@media (max-width:1100px){.app{grid-template-columns:12rem minmax(0,1fr)}.quote{grid-column:1/-1;position:static;max-height:none;border-left:0;border-top:1px solid var(--rule)}}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  .rail{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--rule);padding:8px 12px;gap:4px}
+  .rail .hint{display:none}
+  .step{grid-template-columns:auto auto;white-space:nowrap}
+  .main{padding-bottom:40px}
+}
+@media (prefers-reduced-motion: no-preference){.panel.on{animation:fade .25s ease-out}@keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="mk" aria-hidden="true"></span>Plot-to-Home Studio · Lagos &amp; Ogun</div>
+    <div class="sess">
+      <label class="tag" for="sessPick">Session</label>
+      <select id="sessPick" aria-label="Open a client session"><option value="">Example session (not saved)</option></select>
+      <button class="btn" id="newSess">New client</button>
+      <button class="btn primary" id="saveSess">Save session</button>
+      <span class="status" id="status" role="status"></span>
+    </div>
+    <span class="grow"></span>
+    <button class="btn" id="backupBtn">Back up</button>
+    <label class="btn" for="restoreIn" style="display:inline-flex;align-items:center">Restore</label><input type="file" id="restoreIn" accept=".json" hidden>
+    <button class="btn" id="openRates">Rates &amp; assumptions</button>
+  </header>
+
+  <nav class="rail" aria-label="Session steps">
+    <button class="step" data-p="brief" aria-current="true"><span class="n">1</span>Brief</button>
+    <button class="step" data-p="interiors"><span class="n">2</span>Interiors &amp; finishes</button>
+    <button class="step" data-p="landscape"><span class="n">3</span>Site, landscape &amp; water</button>
+    <button class="step" data-p="energy"><span class="n">4</span>Energy &amp; passive</button>
+    <button class="step" data-p="summary"><span class="n">5</span>Summary</button>
+    <p class="hint">Every figure uses your rates. Change them under <b>Rates &amp; assumptions</b>. Sessions save in this browser only; use <b>Back up</b> to keep a copy.</p>
+  </nav>
+
+  <main class="main">
+    <div id="ratesBanner" class="banner" hidden></div>
+
+    <!-- 1 BRIEF -->
+    <section class="panel on" id="p-brief" aria-labelledby="h-brief">
+      <span class="tag">Step 1</span>
+      <h2 id="h-brief">Brief</h2>
+      <p class="lede">Who the home is for, where it sits, and what the estate allows. The house type sets the floor area that every other cost builds on.</p>
+      <div class="grid">
+        <div class="field"><label for="f-client">Client</label><input type="text" id="f-client" autocomplete="off"></div>
+        <div class="field"><label for="f-estate">Estate</label><input type="text" id="f-estate" autocomplete="off"></div>
+        <div class="field"><label for="f-plot">Plot size (sqm)</label><input type="number" id="f-plot" min="0" step="10"></div>
+        <div class="field"><label for="f-type">Approved house type</label><select id="f-type"></select></div>
+        <div class="field"><label for="f-floor">Floor area (sqm)</label><input type="number" id="f-floor" min="0" step="5"></div>
+        <div class="field"><label for="f-baths">Bathrooms</label><input type="number" id="f-baths" min="0" step="1"></div>
+        <div class="field"><label for="f-household">People in household</label><input type="number" id="f-household" min="1" step="1"></div>
+        <div class="field"><label for="f-budget">Total budget (₦)</label><input type="number" id="f-budget" min="0" step="1000000"></div>
+      </div>
+      <div class="block">
+        <h3>Design direction</h3>
+        <p class="note" style="margin:-4px 0 12px">Pick the mood the client responds to. It guides finishes and decor; it doesn't change the cost on its own.</p>
+        <div class="styles" id="styles"></div>
+      </div>
+      <div class="block">
+        <h3>Estate rules and client notes</h3>
+        <textarea id="f-notes" rows="4" style="width:100%" placeholder="Estate design rules and approved house types, setbacks, building-plan approval route (LASPPPA/LASBCA in Lagos, Ogun planning in Ogun), how wet the plot gets in the rains, things the client loves or rejects…"></textarea>
+      </div>
+    </section>
+
+    <!-- 2 INTERIORS -->
+    <section class="panel" id="p-interiors" aria-labelledby="h-int">
+      <span class="tag">Step 2</span>
+      <h2 id="h-int">Interiors &amp; finishes</h2>
+      <p class="lede">Standard is what the base build rate already covers. Premium and Luxury show the extra cost over standard, so the client sees exactly what each upgrade adds.</p>
+      <div class="block"><div class="rows" id="finRows"></div></div>
+    </section>
+
+    <!-- 3 LANDSCAPE -->
+    <section class="panel" id="p-landscape" aria-labelledby="h-ls">
+      <span class="tag">Step 3</span>
+      <h2 id="h-ls">Site, landscape &amp; water</h2>
+      <p class="lede">Start with the ground: much of Lekki, Ibeju-Lekki and the lagoon edge of Epe and Ikorodu is soft or reclaimed, so sand-filling, a stronger foundation and drainage can matter more than finishes. Then set quantities for the garden and water. Land left after the building footprint is shown as a guide for lawn and paving.</p>
+      <p class="note" id="openArea"></p>
+      <div class="block"><div class="rows" id="lsRows"></div></div>
+    </section>
+
+    <!-- 4 ENERGY -->
+    <section class="panel" id="p-energy" aria-labelledby="h-en">
+      <span class="tag">Step 4</span>
+      <h2 id="h-en">Energy &amp; passive design</h2>
+      <p class="lede">List what the household will run, then compare a generator-only home with a solar-and-battery home over ten years.</p>
+      <div class="block">
+        <h3>Appliances</h3>
+        <div class="tblwrap"><table class="applist" id="appTable">
+          <thead><tr><th>Appliance</th><th>Watts</th><th>Qty</th><th>Hours/day</th><th style="text-align:right">kWh/day</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <button class="btn" id="addApp" style="margin-top:10px">Add appliance</button>
+      </div>
+      <div class="block">
+        <h3>Supply</h3>
+        <div class="grid">
+          <div class="field"><label for="f-grid">Grid power expected (hours a day)</label><div class="range"><input type="range" id="f-grid" min="0" max="24" step="1"><output id="o-grid"></output></div></div>
+          <div class="field"><label for="f-cover">Share of the remaining load solar should cover</label><div class="range"><input type="range" id="f-cover" min="0" max="100" step="5"><output id="o-cover"></output></div></div>
+          <div class="field"><label for="f-night">Share of use after dark (needs battery)</label><div class="range"><input type="range" id="f-night" min="0" max="100" step="5"><output id="o-night"></output></div></div>
+        </div>
+        <div class="metrics" id="enMetrics"></div>
+        <div class="chart" id="enChart"></div>
+        <div class="legend"><span><i style="background:var(--warn)"></i>Generator only</span><span><i style="background:var(--sun)"></i>Solar + battery (incl. remaining generator use)</span></div>
+        <p class="note" id="enNote"></p>
+      </div>
+      <div class="block">
+        <h3>Passive design upgrades</h3>
+        <p class="note" style="margin:-4px 0 6px">Design moves that cut heat gain and cooling load. Explain the trade-offs; costs come from your rates.</p>
+        <div id="passive"></div>
+      </div>
+    </section>
+
+    <!-- 5 SUMMARY -->
+    <section class="panel" id="p-summary" aria-labelledby="h-sum">
+      <span class="tag">Step 5</span>
+      <h2 id="h-sum">Summary</h2>
+      <p class="lede">The full picture to agree with the client before you develop drawings.</p>
+      <div class="block" id="sumBody"></div>
+      <div class="qactions">
+        <button class="btn primary" id="dlSummary">Save summary for client</button>
+        <button class="btn" id="copySummary">Copy summary text</button>
+      </div>
+      <p class="note" id="sumMsg"></p>
+    </section>
+  </main>
+
+  <aside class="quote" aria-label="Running estimate">
+    <span class="tag">Running estimate</span>
+    <p class="client" id="q-client">—</p>
+    <p class="estate" id="q-estate"></p>
+    <div class="total" id="q-total">—</div>
+    <div class="budgetbar" id="q-bar"><span></span></div>
+    <div class="note" id="q-budget"></div>
+    <div class="stack" id="q-stack"></div>
+    <div class="lines" id="q-lines"></div>
+    <div style="margin-top:14px" id="q-energy"></div>
+  </aside>
+</div>
+
+<dialog id="ratesDlg" aria-labelledby="rates-h">
+  <div class="dlg-h"><h3 id="rates-h" style="flex:1">Rates &amp; assumptions</h3><button class="btn" id="resetRates">Undo changes</button><button class="btn primary" id="saveRates">Save rates</button><button class="btn" id="closeRates" aria-label="Close">Close</button></div>
+  <div class="dlg-b" id="ratesBody"></div>
+</dialog>
+
+<script>
+(() => {
+  // ---------- catalogue (structure only; all money comes from rates) ----------
+  const HOUSE_TYPES = [
+    { id: 't3', name: '3-bed terrace duplex', floor: 160, baths: 4 },
+    { id: 's4', name: '4-bed semi-detached duplex', floor: 230, baths: 5 },
+    { id: 'd4', name: '4-bed fully detached duplex', floor: 300, baths: 5 },
+    { id: 'd5', name: '5-bed fully detached duplex + BQ', floor: 420, baths: 7 },
+    { id: 'b3', name: '3-bed bungalow', floor: 150, baths: 3 },
+    { id: 'custom', name: 'Other / custom', floor: 200, baths: 3 },
+  ];
+  const STYLES = [
+    { id: 'afro', name: 'Warm Afro-modern', words: 'Iroko and mahogany, woven textures, adire accents, earth tones', sw: ['#7a4a2a', '#c99a6a', '#e9dccb', '#2d3b36', '#b3542e'] },
+    { id: 'minimal', name: 'Calm minimal', words: 'Pale oak, white plaster, linen, one dark accent wall', sw: ['#f2efe9', '#d8d2c6', '#a59d8f', '#3c3f3e', '#8b9a8f'] },
+    { id: 'tropical', name: 'Tropical modern', words: 'Breeze blocks, terrazzo, rattan, deep greens and shade', sw: ['#1f4a3a', '#5f8f5b', '#d9cfa8', '#f3efe4', '#c7704a'] },
+    { id: 'classic', name: 'Contemporary classic', words: 'Marble-look porcelain, mouldings, brass, navy and cream', sw: ['#1c2a44', '#f1ece2', '#c9a45c', '#8a8f99', '#ffffff'] },
+    { id: 'industrial', name: 'Soft industrial', words: 'Polished concrete, black steel, exposed brick, warm lighting', sw: ['#2b2b2b', '#8c8c86', '#b86b48', '#d9d3c7', '#4a5a5f'] },
+    { id: 'coastal', name: 'Coastal contemporary', words: 'White render, aluminium louvres, teak, sea-salt blues, shaded terraces', sw: ['#f4f2ec', '#9fb8c4', '#2f5d73', '#b58b5a', '#d8d1c3'] },
+  ];
+  // unit: 'm2' = per sqm of floor area; 'each' = per unit (kitchen); 'bath' = per bathroom
+  const FINISHES = [
+    { id: 'floor', name: 'Flooring', hint: 'Tiles, porcelain, timber or stone', unit: 'm2' },
+    { id: 'kitchen', name: 'Kitchen', hint: 'Cabinets, worktops, appliances package', unit: 'each' },
+    { id: 'bath', name: 'Bathrooms', hint: 'Sanitary ware, fittings, wall finishes', unit: 'bath' },
+    { id: 'ceiling', name: 'Ceilings & lighting', hint: 'POP or gypsum, cove lighting, fittings', unit: 'm2' },
+    { id: 'windows', name: 'Doors & windows', hint: 'Frames, glazing, security doors', unit: 'm2' },
+    { id: 'facade', name: 'Facade finish', hint: 'Within what the estate allows', unit: 'm2' },
+  ];
+  const LEVELS = [['standard', 'Standard'], ['premium', 'Premium'], ['luxury', 'Luxury']];
+  const LANDSCAPE = [
+    { id: 'sandfill', name: 'Sand-filling', unit: 'trips', hint: 'Tipper loads to raise a low or swampy plot above flood level' },
+    { id: 'raft', name: 'Raft or piled foundation (extra over strip)', unit: 'sqm', hint: 'For soft or reclaimed ground; quantity = ground-floor footprint. Get a soil test first.' },
+    { id: 'soiltest', name: 'Soil investigation', unit: 'test', hint: 'Boreholes and lab tests before foundation design' },
+    { id: 'drain', name: 'Perimeter drainage', unit: 'm', hint: 'Lined drains so storm water leaves the plot' },
+    { id: 'lawn', name: 'Lawn and ground cover', unit: 'sqm', hint: 'Grass or low-water ground cover' },
+    { id: 'paving', name: 'Paving and driveway', unit: 'sqm', hint: 'Interlock or stamped concrete' },
+    { id: 'trees', name: 'Shade trees', unit: 'trees', hint: 'Cools the walls and parking' },
+    { id: 'hedge', name: 'Boundary planting', unit: 'm', hint: 'Hedge along the fence line' },
+    { id: 'lights', name: 'Outdoor lights', unit: 'lights', hint: 'Solar bollards or wall lights' },
+    { id: 'rainwater', name: 'Rainwater harvesting', unit: 'system', hint: 'Gutters, filter, storage tank' },
+    { id: 'borehole', name: 'Borehole and pump', unit: 'borehole', hint: 'Where the estate has no mains water' },
+    { id: 'watertreat', name: 'Water treatment', unit: 'system', hint: 'Iron and salinity removal; common on Lagos boreholes' },
+  ];
+  const PASSIVE = [
+    { id: 'overhang', name: 'Deep roof overhangs and window shading', hint: 'Keeps direct sun off walls and glass, especially east and west faces.', unit: 'm2' },
+    { id: 'roofins', name: 'Roof insulation', hint: 'Cuts heat coming through the roof into upstairs rooms.', unit: 'm2' },
+    { id: 'coolroof', name: 'Light-coloured, reflective roof', hint: 'Reflects more sunlight; check the estate allows the colour.', unit: 'm2' },
+    { id: 'vent', name: 'Cross-ventilation and stack vents', hint: 'Opposite openings and high-level vents so rooms flush hot air.', unit: 'lump' },
+    { id: 'solarwater', name: 'Solar water heater', hint: 'Removes electric water heating from the load.', unit: 'each' },
+    { id: 'plinth', name: 'Raised floor level (plinth)', hint: 'Lifts the ground floor above local flood level in the rainy season.', unit: 'm2' },
+    { id: 'saltproof', name: 'Salt-air protection (coastal)', hint: 'Marine-grade aluminium, stainless fixings and coated steel near the coast.', unit: 'm2' },
+  ];
+  const RATE_DEFS = [
+    ['Build', [['base', 'Base build rate, standard finish', '₦ per sqm of floor area']]],
+    ['Finishes — extra over standard', [
+      ['floor_p', 'Flooring, premium', '₦ per sqm'], ['floor_l', 'Flooring, luxury', '₦ per sqm'],
+      ['kitchen_p', 'Kitchen, premium', '₦ per kitchen'], ['kitchen_l', 'Kitchen, luxury', '₦ per kitchen'],
+      ['bath_p', 'Bathroom, premium', '₦ per bathroom'], ['bath_l', 'Bathroom, luxury', '₦ per bathroom'],
+      ['ceiling_p', 'Ceilings & lighting, premium', '₦ per sqm'], ['ceiling_l', 'Ceilings & lighting, luxury', '₦ per sqm'],
+      ['windows_p', 'Doors & windows, premium', '₦ per sqm of floor'], ['windows_l', 'Doors & windows, luxury', '₦ per sqm of floor'],
+      ['facade_p', 'Facade, premium', '₦ per sqm of floor'], ['facade_l', 'Facade, luxury', '₦ per sqm of floor'],
+    ]],
+    ['Site preparation', [
+      ['sandfill', 'Sand-filling', '₦ per tipper trip'], ['raft', 'Raft or piled foundation, extra over strip', '₦ per sqm of footprint'],
+      ['soiltest', 'Soil investigation', '₦ per test'], ['drain', 'Perimeter drainage', '₦ per metre'],
+    ]],
+    ['Landscape & water', [
+      ['lawn', 'Lawn and ground cover', '₦ per sqm'], ['paving', 'Paving and driveway', '₦ per sqm'], ['trees', 'Shade tree, planted', '₦ each'],
+      ['hedge', 'Boundary planting', '₦ per metre'], ['lights', 'Outdoor light', '₦ each'], ['rainwater', 'Rainwater harvesting system', '₦ per system'], ['borehole', 'Borehole and pump', '₦ each'],
+      ['watertreat', 'Water treatment system', '₦ per system'],
+    ]],
+    ['Passive design', [
+      ['overhang', 'Overhangs and shading', '₦ per sqm of floor'], ['roofins', 'Roof insulation', '₦ per sqm of floor'], ['coolroof', 'Reflective roof upgrade', '₦ per sqm of floor'],
+      ['vent', 'Cross-ventilation and stack vents', '₦ lump sum'], ['solarwater', 'Solar water heater', '₦ each'],
+      ['plinth', 'Raised floor level', '₦ per sqm of floor'], ['saltproof', 'Salt-air protection', '₦ per sqm of floor'],
+    ]],
+    ['Energy', [
+      ['solar_kwp', 'Solar PV installed, incl. inverter', '₦ per kWp'], ['battery_kwh', 'Battery storage', '₦ per kWh'],
+      ['petrol', 'Petrol price', '₦ per litre'], ['litres_kwh', 'Generator fuel use', 'litres per kWh'],
+      ['gen_maint', 'Generator servicing and repairs', '₦ per year'], ['psh', 'Peak sun hours (Lagos)', 'hours per day'],
+      ['pv_eff', 'Solar system efficiency', '0 to 1'], ['dod', 'Usable battery depth', '0 to 1'],
+    ]],
+  ];
+  // Example rates so the tool works before the architect sets real ones. Not market prices.
+  const EXAMPLE_RATES = { base: 500000, sandfill: 180000, raft: 45000, soiltest: 450000, drain: 25000, watertreat: 1200000, plinth: 5000, saltproof: 6000, floor_p: 15000, floor_l: 45000, kitchen_p: 4000000, kitchen_l: 12000000, bath_p: 1500000, bath_l: 4000000,
+    ceiling_p: 10000, ceiling_l: 25000, windows_p: 20000, windows_l: 50000, facade_p: 12000, facade_l: 35000,
+    lawn: 5000, paving: 20000, trees: 80000, hedge: 8000, lights: 50000, rainwater: 2000000, borehole: 3500000,
+    overhang: 6000, roofins: 8000, coolroof: 4000, vent: 600000, solarwater: 900000,
+    solar_kwp: 1100000, battery_kwh: 500000, petrol: 1470, litres_kwh: 0.5, gen_maint: 400000, psh: 4.5, pv_eff: 0.75, dod: 0.8 };
+  const RATE_KEYS = RATE_DEFS.flatMap(([, list]) => list.map((r) => r[0]));
+
+  const EXAMPLE_SESSION = {
+    client: 'Example: Mr & Mrs Adeyemi', estate: 'Example: Bogije estate, Lekki–Epe expressway', plot: 600, type: 'd4', floor: 300, baths: 5, household: 5, budget: 200000000,
+    style: 'tropical', notes: 'Example notes. Plot sits low and holds water in July; estate requires approved elevations. Client wants a home office and a bright kitchen.',
+    finishes: { floor: 'premium', kitchen: 'premium', bath: 'standard', ceiling: 'premium', windows: 'standard', facade: 'standard' },
+    landscape: { sandfill: 12, raft: 150, soiltest: 1, drain: 90, lawn: 120, paving: 110, trees: 3, hedge: 70, lights: 8, rainwater: 1, borehole: 1, watertreat: 1 },
+    passive: { overhang: true, roofins: true, coolroof: false, vent: true, solarwater: false, plinth: true, saltproof: false },
+    grid: 10, cover: 80, night: 50,
+    apps: [
+      { n: 'Fridge-freezer', w: 150, q: 1, h: 12 }, { n: 'Chest freezer', w: 120, q: 1, h: 12 }, { n: 'LED lights', w: 10, q: 25, h: 6 },
+      { n: 'Ceiling fans', w: 60, q: 5, h: 8 }, { n: 'Air conditioner (1.5hp)', w: 1100, q: 2, h: 5 }, { n: 'TV and decoder', w: 120, q: 2, h: 6 },
+      { n: 'Water pump', w: 750, q: 1, h: 1 }, { n: 'Laptops and phones', w: 60, q: 3, h: 6 }, { n: 'Washing machine', w: 500, q: 1, h: 1 }, { n: 'Pressing iron', w: 1000, q: 1, h: 0.5 },
+    ],
+  };
+
+  // ---------- state ----------
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  let S = clone(EXAMPLE_SESSION);
+  let sessId = null;          // null = unsaved example / new
+  let rates = { ...EXAMPLE_RATES }; // replaced by saved rates when they load
+  let ratesExample = true;
+  let ratesDraft = null;
+  let db = null, downloads = null;
+  let sessions = [];
+  let dirty = false;
+  let isExample = true;
+
+  // ---------- helpers ----------
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } for (const k of kids) if (k != null) e.append(k); return e; };
+  const N = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+  const R = (k) => (rates && Number.isFinite(Number(rates[k])) ? Number(rates[k]) : null);
+  const naira = (v) => v == null ? '—' : '₦' + Math.round(v).toLocaleString('en-NG');
+  const short = (v) => { if (v == null) return '—'; const a = Math.abs(v); if (a >= 1e9) return '₦' + (v / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '₦' + (v / 1e6).toFixed(1) + 'M'; if (a >= 1e3) return '₦' + Math.round(v / 1e3) + 'k'; return '₦' + Math.round(v); };
+  const status = (t) => { $('#status').textContent = t; };
+  const markDirty = () => { dirty = true; if (sessId) status('Unsaved changes'); scheduleSave(); };
+
+  // ---------- costing ----------
+  function finishCost(f) {
+    const lvl = S.finishes[f.id] || 'standard'; if (lvl === 'standard') return 0;
+    const r = R(f.id + (lvl === 'premium' ? '_p' : '_l')); if (r == null) return null;
+    const mult = f.unit === 'm2' ? N(S.floor) : f.unit === 'bath' ? N(S.baths) : 1;
+    return r * mult;
+  }
+  function lsCost(item) { const r = R(item.id); if (r == null) return null; return r * N(S.landscape[item.id]); }
+  function passiveCost(p) {
+    if (!S.passive[p.id]) return 0; const r = R(p.id); if (r == null) return null;
+    return p.unit === 'm2' ? r * N(S.floor) : r;
+  }
+  function energy() {
+    const daily = S.apps.reduce((s, a) => s + N(a.w) * N(a.q) * N(a.h) / 1000, 0);
+    const peak = S.apps.reduce((s, a) => s + N(a.w) * N(a.q) / 1000, 0);
+    const offGrid = 1 - Math.min(24, N(S.grid)) / 24;
+    const needKwh = daily * offGrid;             // energy not supplied by the grid
+    const solarKwh = needKwh * N(S.cover) / 100; // covered by solar
+    const psh = R('psh'), eff = R('pv_eff'), dod = R('dod');
+    const kwp = psh && eff ? solarKwh / (psh * eff) : null;
+    const batt = dod ? solarKwh * N(S.night) / 100 / dod : null;
+    const capex = kwp != null && batt != null && R('solar_kwp') != null && R('battery_kwh') != null ? kwp * R('solar_kwp') + batt * R('battery_kwh') : null;
+    const fuelYr = (kwh) => (R('litres_kwh') != null && R('petrol') != null ? kwh * R('litres_kwh') * R('petrol') * 365 : null);
+    const genOnly = fuelYr(needKwh) == null || R('gen_maint') == null ? null : fuelYr(needKwh) + (needKwh > 0 ? R('gen_maint') : 0);
+    const residualKwh = needKwh - solarKwh;
+    const withSolar = fuelYr(residualKwh) == null || R('gen_maint') == null ? null : fuelYr(residualKwh) + (residualKwh > 0.05 ? R('gen_maint') : 0);
+    const saving = genOnly != null && withSolar != null ? genOnly - withSolar : null;
+    const payback = capex != null && saving > 0 ? capex / saving : null;
+    return { daily, peak, needKwh, solarKwh, kwp, batt, capex, genOnly, withSolar, saving, payback };
+  }
+  function totals() {
+    const base = R('base') == null ? null : R('base') * N(S.floor);
+    const fins = FINISHES.map((f) => finishCost(f));
+    const ls = LANDSCAPE.map((i) => lsCost(i));
+    const pas = PASSIVE.map((p) => passiveCost(p));
+    const sum = (arr) => arr.some((v) => v == null) ? null : arr.reduce((a, b) => a + b, 0);
+    const en = energy();
+    const parts = [
+      { k: 'Base build', v: base, c: 'var(--granite)' },
+      { k: 'Finish upgrades', v: sum(fins), c: 'var(--plum)' },
+      { k: 'Site, landscape & water', v: sum(ls), c: 'var(--leaf)' },
+      { k: 'Passive design', v: sum(pas), c: 'var(--sky)' },
+      { k: 'Solar + battery', v: en.capex, c: 'var(--sun)' },
+    ];
+    const total = parts.some((p) => p.v == null) ? null : parts.reduce((a, p) => a + p.v, 0);
+    return { parts, total, en };
+  }
+
+  // ---------- render: brief ----------
+  const typeSel = $('#f-type');
+  HOUSE_TYPES.forEach((t) => typeSel.append(new Option(t.name, t.id)));
+  const bind = (id, key, num = true, after) => {
+    const inp = $(id);
+    inp.addEventListener('input', () => { S[key] = num ? N(inp.value) : inp.value; markDirty(); after && after(); renderQuote(); });
+  };
+  bind('#f-client', 'client', false); bind('#f-estate', 'estate', false); bind('#f-plot', 'plot', true, renderLandscape);
+  bind('#f-floor', 'floor', true, () => { renderFinishes(); renderPassive(); renderLandscape(); });
+  bind('#f-baths', 'baths', true, renderFinishes); bind('#f-household', 'household'); bind('#f-budget', 'budget'); bind('#f-notes', 'notes', false);
+  typeSel.addEventListener('change', () => {
+    const t = HOUSE_TYPES.find((x) => x.id === typeSel.value); S.type = t.id; S.floor = t.floor; S.baths = t.baths;
+    $('#f-floor').value = S.floor; $('#f-baths').value = S.baths; markDirty(); renderAll();
+  });
+  function renderBrief() {
+    $('#f-client').value = S.client || ''; $('#f-estate').value = S.estate || ''; $('#f-plot').value = S.plot || '';
+    typeSel.value = S.type || 'custom'; $('#f-floor').value = S.floor || ''; $('#f-baths').value = S.baths ?? '';
+    $('#f-household').value = S.household || ''; $('#f-budget').value = S.budget || ''; $('#f-notes').value = S.notes || '';
+    const box = $('#styles'); box.replaceChildren();
+    for (const st of STYLES) {
+      const sw = el('div', { class: 'swatches', 'aria-hidden': 'true' }, ...st.sw.map((c) => { const s = el('span'); s.style.background = c; return s; }));
+      box.append(el('button', { class: 'style', 'aria-pressed': String(S.style === st.id), onclick: () => { S.style = st.id; markDirty(); renderBrief(); renderQuote(); } }, sw, el('b', { text: st.name }), el('small', { text: st.words })));
+    }
+  }
+
+  // ---------- render: finishes ----------
+  function renderFinishes() {
+    const box = $('#finRows'); box.replaceChildren();
+    for (const f of FINISHES) {
+      const cur = S.finishes[f.id] || 'standard';
+      const seg = el('div', { class: 'seg', role: 'group', 'aria-label': f.name });
+      for (const [lv, label] of LEVELS) {
+        const r = lv === 'standard' ? 0 : R(f.id + (lv === 'premium' ? '_p' : '_l'));
+        const unitTxt = f.unit === 'm2' ? '/sqm' : f.unit === 'bath' ? '/bath' : '';
+        const tip = lv === 'standard' ? 'In base rate' : (r == null ? 'No rate set' : '+' + short(r) + unitTxt);
+        seg.append(el('button', { class: 'chip', 'aria-pressed': String(cur === lv), title: tip, onclick: () => { S.finishes[f.id] = lv; markDirty(); renderFinishes(); renderQuote(); } }, label));
+      }
+      const c = finishCost(f);
+      box.append(el('div', { class: 'row' }, el('div', { class: 'nm' }, el('b', { text: f.name }), el('small', { text: f.hint })), seg, el('div', { class: 'amt', text: c === 0 ? 'In base' : '+' + naira(c) })));
+    }
+  }
+
+  // ---------- render: landscape ----------
+  function renderLandscape() {
+    const footprint = N(S.floor) / (['t3', 's4', 'd4', 'd5'].includes(S.type) ? 2 : 1);
+    const open = Math.max(0, N(S.plot) - footprint);
+    $('#openArea').textContent = S.plot ? `Plot ${N(S.plot).toLocaleString()} sqm, building footprint about ${Math.round(footprint).toLocaleString()} sqm, leaving about ${Math.round(open).toLocaleString()} sqm for yard, parking and planting.` : '';
+    const box = $('#lsRows'); box.replaceChildren();
+    for (const it of LANDSCAPE) {
+      const inp = el('input', { type: 'number', min: '0', step: it.unit === 'sqm' || it.unit === 'm' ? '5' : '1', id: 'ls-' + it.id, 'aria-label': it.name + ' quantity' });
+      inp.value = S.landscape[it.id] ?? 0;
+      inp.addEventListener('input', () => { S.landscape[it.id] = N(inp.value); markDirty(); amt.textContent = naira(lsCost(it)); renderQuote(); });
+      const amt = el('div', { class: 'amt', text: naira(lsCost(it)) });
+      box.append(el('div', { class: 'row' }, el('div', { class: 'nm' }, el('b', { text: it.name }), el('small', { text: it.hint })), el('div', { class: 'qty' }, inp, el('span', { text: it.unit })), amt));
+    }
+  }
+
+  // ---------- render: energy ----------
+  const fmtK = (v, d = 1) => v == null ? '—' : v.toLocaleString('en', { maximumFractionDigits: d });
+  function renderApps() {
+    const tb = $('#appTable tbody'); tb.replaceChildren();
+    S.apps.forEach((a, i) => {
+      const mk = (key, attrs) => { const x = el('input', attrs); x.value = a[key]; x.addEventListener('input', () => { a[key] = key === 'n' ? x.value : N(x.value); markDirty(); kc.textContent = fmtK(N(a.w) * N(a.q) * N(a.h) / 1000, 2); renderEnergyOut(); renderQuote(); }); return x; };
+      const kc = el('td', { class: 'k', text: fmtK(N(a.w) * N(a.q) * N(a.h) / 1000, 2) });
+      tb.append(el('tr', {},
+        el('td', {}, mk('n', { type: 'text', 'aria-label': 'Appliance name' })),
+        el('td', {}, mk('w', { type: 'number', min: '0', step: '10', 'aria-label': 'Watts' })),
+        el('td', {}, mk('q', { type: 'number', min: '0', step: '1', 'aria-label': 'Quantity' })),
+        el('td', {}, mk('h', { type: 'number', min: '0', max: '24', step: '0.5', 'aria-label': 'Hours per day' })),
+        kc,
+        el('td', {}, el('button', { class: 'btn', 'aria-label': 'Remove ' + a.n, onclick: () => { S.apps.splice(i, 1); markDirty(); renderApps(); renderEnergyOut(); renderQuote(); } }, '×'))));
+    });
+  }
+  $('#addApp').addEventListener('click', () => { S.apps.push({ n: 'New appliance', w: 100, q: 1, h: 4 }); markDirty(); renderApps(); renderEnergyOut(); renderQuote(); });
+  const sliders = [['#f-grid', 'grid', '#o-grid', (v) => v + ' h'], ['#f-cover', 'cover', '#o-cover', (v) => v + '%'], ['#f-night', 'night', '#o-night', (v) => v + '%']];
+  for (const [id, key, out, fmt] of sliders) {
+    $(id).addEventListener('input', (e) => { S[key] = N(e.target.value); $(out).textContent = fmt(S[key]); markDirty(); renderEnergyOut(); renderQuote(); });
+  }
+  function renderEnergy() {
+    for (const [id, key, out, fmt] of sliders) { $(id).value = S[key]; $(out).textContent = fmt(S[key]); }
+    renderApps(); renderEnergyOut(); renderPassive();
+  }
+  function renderEnergyOut() {
+    const e = energy();
+    const m = $('#enMetrics'); m.replaceChildren();
+    const add = (v, l) => m.append(el('div', { class: 'metric' }, el('div', { class: 'v', text: v }), el('div', { class: 'l', text: l })));
+    add(fmtK(e.daily) + ' kWh', 'Household use per day');
+    add(fmtK(e.peak) + ' kW', 'If everything ran at once');
+    add(e.kwp == null ? '—' : fmtK(e.kwp) + ' kWp', 'Solar panels needed');
+    add(e.batt == null ? '—' : fmtK(e.batt) + ' kWh', 'Battery size');
+    add(short(e.capex), 'Solar + battery cost');
+    add(e.payback == null ? '—' : fmtK(e.payback) + ' yrs', 'Payback from fuel saved');
+    drawEnergyChart(e);
+    const big = S.apps.slice().sort((a, b) => N(b.w) * N(b.q) * N(b.h) - N(a.w) * N(a.q) * N(a.h))[0];
+    const share = big && e.daily ? N(big.w) * N(big.q) * N(big.h) / 1000 / e.daily : 0;
+    $('#enNote').textContent = (big ? `${big.n} uses ${Math.round(share * 100)}% of daily energy${share > 0.3 ? ', so passive cooling and efficient units shrink the solar system most.' : '.'} ` : '') + 'Battery and panel replacement, and future fuel price changes, are not included. With any generator use left, its full yearly servicing is still counted.';
+  }
+  function drawEnergyChart(e) {
+    const box = $('#enChart'); box.replaceChildren();
+    if (e.genOnly == null || e.capex == null) { box.append(el('p', { class: 'note', text: 'Set energy rates to see the ten-year comparison.' })); return; }
+    const yrs = () => Array.from({ length: 11 }, (_, i) => i);
+    const gen = yrs().map((y) => e.genOnly * y);
+    const sol = yrs().map((y) => e.capex + e.withSolar * y);
+    const W = Math.max(320, box.clientWidth || 600), H = 220, m = { l: 56, r: 64, t: 12, b: 28 };
+    const max = Math.max(...gen, ...sol) || 1;
+    const x = (i) => m.l + (W - m.l - m.r) * i / 10, y = (v) => H - m.b - (H - m.t - m.b) * v / max;
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Cumulative ten-year energy cost: generator only versus solar and battery');
+    const mk = (t, a) => { const n = document.createElementNS(ns, t); for (const k in a) { const v = String(a[k]); if ((k === 'fill' || k === 'stroke') && v.startsWith('var(')) n.style[k] = v; else n.setAttribute(k, v); } svg.append(n); return n; };
+    for (let i = 0; i <= 4; i++) { const v = max * i / 4; mk('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: 'var(--rule-2)' }); const t = mk('text', { x: m.l - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: 'var(--ink-2)', 'font-family': 'IBM Plex Mono, monospace' }); t.textContent = short(v); }
+    for (let i = 0; i <= 10; i += 2) { const t = mk('text', { x: x(i), y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--ink-2)' }); t.textContent = i === 0 ? 'Now' : 'Yr ' + i; }
+    const path = (arr) => arr.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+    mk('path', { d: path(gen), fill: 'none', stroke: 'var(--warn)', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+    mk('path', { d: path(sol), fill: 'none', stroke: 'var(--sun)', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+    const end = (arr, col) => { mk('circle', { cx: x(10), cy: y(arr[10]), r: 4, fill: col }); const t = mk('text', { x: x(10) + 6, y: y(arr[10]) + 4, 'font-size': 11, fill: 'var(--ink)', 'font-family': 'IBM Plex Mono, monospace' }); t.textContent = short(arr[10]); return t; };
+    const a = end(gen, 'var(--warn)'), b = end(sol, 'var(--sun)');
+    if (Math.abs(y(gen[10]) - y(sol[10])) < 14) b.setAttribute('y', y(sol[10]) + (y(sol[10]) > y(gen[10]) ? 16 : -8));
+    box.append(svg);
+  }
+  function renderPassive() {
+    const box = $('#passive'); box.replaceChildren();
+    for (const p of PASSIVE) {
+      const cb = el('input', { type: 'checkbox', id: 'pv-' + p.id }); cb.checked = !!S.passive[p.id];
+      cb.addEventListener('change', () => { S.passive[p.id] = cb.checked; markDirty(); renderPassive(); renderQuote(); });
+      const c = passiveCost(p);
+      box.append(el('div', { class: 'check' }, cb, el('div', {}, el('label', { for: 'pv-' + p.id, text: p.name }), el('small', { text: p.hint })), el('div', { class: 'amt', style: 'flex:0 0 auto', text: S.passive[p.id] ? naira(c) : '—' })));
+    }
+  }
+
+  // ---------- quote panel ----------
+  function renderQuote() {
+    const t = totals();
+    $('#q-client').textContent = S.client || 'Unnamed client';
+    const ty = HOUSE_TYPES.find((h) => h.id === S.type);
+    $('#q-estate').textContent = [S.estate, ty && ty.name, S.floor ? N(S.floor) + ' sqm' : ''].filter(Boolean).join(' · ');
+    $('#q-total').textContent = t.total == null ? '—' : naira(t.total);
+    const bar = $('#q-bar'), b = N(S.budget);
+    if (t.total != null && b > 0) {
+      const pct = t.total / b; bar.querySelector('span').style.width = Math.min(100, pct * 100) + '%'; bar.classList.toggle('over', pct > 1);
+      $('#q-budget').replaceChildren(el('span', { class: 'pill ' + (pct > 1 ? 'bad' : 'ok'), text: pct > 1 ? short(t.total - b) + ' over budget' : short(b - t.total) + ' under budget' }), ' of ' + short(b));
+    } else { bar.querySelector('span').style.width = '0'; $('#q-budget').textContent = t.total == null ? 'Some rates are missing.' : 'Set a budget in the brief.'; }
+    const st = $('#q-stack'); st.replaceChildren();
+    const lines = $('#q-lines'); lines.replaceChildren();
+    for (const p of t.parts) {
+      if (t.total && p.v) { const s = el('span', { title: p.k }); s.style.width = (p.v / t.total * 100) + '%'; s.style.background = p.c; st.append(s); }
+      const dot = el('i', { 'aria-hidden': 'true' }); dot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;background:${p.c}`;
+      lines.append(el('div', { class: 'line' }, el('span', {}, dot, p.k), el('span', { class: 'a', text: naira(p.v) })));
+    }
+    const e = t.en, qe = $('#q-energy'); qe.replaceChildren();
+    if (e.payback != null) qe.append(el('span', { class: 'pill', text: `Solar pays back in about ${fmtK(e.payback)} years` }));
+    if (S.style) { const s = STYLES.find((x) => x.id === S.style); if (s) qe.append(el('p', { class: 'note', style: 'margin-top:8px', text: 'Direction: ' + s.name })); }
+    if (activePanel === 'summary') renderSummary();
+  }
+
+  // ---------- summary ----------
+  function summaryText() {
+    const t = totals(), e = t.en, ty = HOUSE_TYPES.find((h) => h.id === S.type), st = STYLES.find((x) => x.id === S.style);
+    const L = [];
+    L.push(`Design summary for ${S.client || 'client'}`);
+    L.push(`${S.estate || ''}${S.plot ? ' · plot ' + N(S.plot) + ' sqm' : ''}`);
+    L.push(`House: ${ty ? ty.name : ''}, about ${N(S.floor)} sqm, ${N(S.baths)} bathrooms`);
+    if (st) L.push(`Design direction: ${st.name} (${st.words})`);
+    L.push('');
+    L.push('Finishes: ' + FINISHES.map((f) => `${f.name} ${S.finishes[f.id] || 'standard'}`).join('; '));
+    const lsOn = LANDSCAPE.filter((i) => N(S.landscape[i.id]) > 0).map((i) => `${i.name} ${N(S.landscape[i.id])} ${i.unit}`);
+    L.push('Site, landscape & water: ' + (lsOn.join('; ') || 'none'));
+    const pOn = PASSIVE.filter((p) => S.passive[p.id]).map((p) => p.name);
+    L.push('Passive design: ' + (pOn.join('; ') || 'none'));
+    L.push(`Energy: about ${fmtK(e.daily)} kWh a day; ${fmtK(e.kwp)} kWp solar with ${fmtK(e.batt)} kWh battery${e.payback != null ? `, paying back in about ${fmtK(e.payback)} years from fuel saved` : ''}`);
+    L.push('');
+    for (const p of t.parts) L.push(`${p.k}: ${naira(p.v)}`);
+    L.push(`Estimated total: ${naira(t.total)}${N(S.budget) ? ' (budget ' + naira(N(S.budget)) + ')' : ''}`);
+    L.push('');
+    L.push('Indicative estimate for discussion, not a quotation. Final costs follow detailed drawings and the bill of quantities.');
+    if (ratesExample) L.push('NOTE: these figures use example rates that have not been reviewed.');
+    return L.join('\n');
+  }
+  function renderSummary() {
+    const box = $('#sumBody'); box.replaceChildren();
+    if (ratesExample) box.append(el('div', { class: 'banner bad', text: 'These figures use example rates. Set and save your own rates before sharing with a client.' }));
+    box.append(el('pre', { style: 'white-space:pre-wrap;font-family:var(--f-body);margin:0;line-height:1.6', text: summaryText() }));
+  }
+  function summaryHtml() {
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const st = STYLES.find((x) => x.id === S.style);
+    const sw = st ? st.sw.map((c) => `<span style="display:inline-block;width:36px;height:36px;background:${c};border-radius:4px;margin-right:4px"></span>`).join('') : '';
+    return `<!doctype html><html><head><meta charset="utf-8"><title>Design summary – ${esc(S.client || 'client')}</title></head><body style="font-family:Segoe UI,Helvetica,Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#1d2a2b;line-height:1.6"><div>${sw}</div><pre style="white-space:pre-wrap;font-family:inherit;font-size:15px">${esc(summaryText())}</pre></body></html>`;
+  }
+  $('#copySummary').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(summaryText()); $('#sumMsg').textContent = 'Summary copied.'; }
+    catch { const pre = $('#sumBody pre'); if (pre) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } $('#sumMsg').textContent = 'Copy was blocked here, so the text is selected. Press Ctrl+C or Cmd+C.'; }
+  });
+  $('#dlSummary').addEventListener('click', async () => {
+    if (!downloads) { $('#sumMsg').textContent = 'Saving files isn’t available in this view. Use Copy summary text instead.'; return; }
+    const name = 'Design summary - ' + (S.client || 'client').replace(/[^\w\s&-]/g, '').trim() + '.html';
+    try { await downloads.save({ filename: name, data: summaryHtml() }); $('#sumMsg').textContent = 'Summary saved.'; }
+    catch (err) { $('#sumMsg').textContent = err && err.code === 'declined' ? 'Save cancelled.' : 'Couldn’t save the file here. Use Copy summary text instead.'; }
+  });
+
+  // ---------- rates dialog ----------
+  const dlg = $('#ratesDlg');
+  function renderRatesBody() {
+    const body = $('#ratesBody'); body.replaceChildren();
+    body.append(el('p', { class: 'note', style: 'margin-top:10px', text: ratesExample ? 'These are example rates to show how the tool works. They are not market prices. Replace them with your own before quoting.' : 'Your saved rates. Changes apply to every session.' }));
+    for (const [group, list] of RATE_DEFS) {
+      const g = el('div', { class: 'rgroup' }, el('h4', { text: group }));
+      for (const [k, label, unit] of list) {
+        const inp = el('input', { type: 'number', step: 'any', min: '0', id: 'rate-' + k, 'aria-label': label });
+        inp.value = ratesDraft[k] ?? '';
+        inp.addEventListener('input', () => { ratesDraft[k] = inp.value === '' ? null : Number(inp.value); });
+        g.append(el('div', { class: 'rate' }, el('span', {}, label, el('small', { text: unit })), inp));
+      }
+      body.append(g);
+    }
+  }
+  $('#openRates').addEventListener('click', () => { ratesDraft = { ...(rates || {}) }; renderRatesBody(); dlg.showModal(); });
+  $('#closeRates').addEventListener('click', () => dlg.close());
+  $('#resetRates').addEventListener('click', () => { ratesDraft = { ...(rates || {}) }; renderRatesBody(); });
+  $('#saveRates').addEventListener('click', async () => {
+    const vals = {}; for (const k of RATE_KEYS) if (ratesDraft[k] != null && Number.isFinite(ratesDraft[k])) vals[k] = ratesDraft[k];
+    if (!db) { rates = vals; ratesExample = false; renderAll(); dlg.close(); renderAll(); status('Rates used for this visit only'); return; }
+    try { await db.doc('settings/rates').set({ values: vals, examples: false, updated: new Date().toISOString() }); dlg.close(); status('Rates saved'); }
+    catch { status('Couldn’t save rates in this browser.'); }
+  });
+
+  // ---------- sessions ----------
+  const pick = $('#sessPick');
+  function renderPicker() {
+    pick.replaceChildren(new Option(isExample ? 'Example session (not saved)' : 'New session (not saved yet)', ''));
+    for (const s of sessions) pick.append(new Option(`${s.client || 'Unnamed'} — ${s.estate || 'no estate'}`, s.id));
+    pick.value = sessId || '';
+  }
+  pick.addEventListener('change', () => {
+    const id = pick.value;
+    if (!id) { sessId = null; isExample = true; S = clone(EXAMPLE_SESSION); renderAll(); status('Example session'); return; }
+    const s = sessions.find((x) => x.id === id); if (!s) return;
+    sessId = id; isExample = false; S = Object.assign(clone(EXAMPLE_SESSION), clone(s.data)); dirty = false; renderAll(); status('Opened');
+  });
+  $('#newSess').addEventListener('click', () => {
+    sessId = null; isExample = false; S = clone(EXAMPLE_SESSION);
+    Object.assign(S, { client: '', estate: '', notes: '', budget: 0, style: '' });
+    renderAll(); show('brief'); $('#f-client').focus(); status('New client. Fill the brief, then save.');
+  });
+  let saveTimer = null, saving = false;
+  function scheduleSave() { if (!sessId || !db) return; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 2000); }
+  async function saveNow() {
+    if (!db || saving) return;
+    if (!S.client) { status('Add the client’s name before saving.'); return; }
+    saving = true;
+    try {
+      if (!sessId) sessId = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      await db.doc('sessions/' + sessId).set({ client: S.client, estate: S.estate || '', updated: new Date().toISOString(), data: clone(S) });
+      dirty = false; status('Saved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) { status(err && err.code === 'quota_exceeded' ? 'Storage is full. Delete old sessions to save new ones.' : 'Couldn’t save in this browser. Use Back up.'); }
+    saving = false;
+  }
+  $('#saveSess').addEventListener('click', () => { if (!db) { status('This browser blocks saving. Use Back up.'); return; } clearTimeout(saveTimer); saveNow(); });
+
+  // ---------- navigation ----------
+  let activePanel = 'brief';
+  function show(p) {
+    activePanel = p;
+    document.querySelectorAll('.panel').forEach((x) => x.classList.toggle('on', x.id === 'p-' + p));
+    document.querySelectorAll('.step').forEach((x) => x.setAttribute('aria-current', String(x.dataset.p === p)));
+    if (p === 'energy') renderEnergyOut();
+    if (p === 'summary') renderSummary();
+    try { localStorage.setItem('p2h-step', p); } catch {}
+  }
+  document.querySelectorAll('.step').forEach((b) => b.addEventListener('click', () => show(b.dataset.p)));
+
+  function renderBanner() {
+    const b = $('#ratesBanner');
+    if (!rates) { b.hidden = false; b.className = 'banner'; b.textContent = 'Loading your rates…'; return; }
+    b.hidden = !ratesExample; b.className = 'banner';
+    b.replaceChildren('Example rates are loaded so you can try the tool. They are not market prices. ', el('button', { class: 'btn', onclick: () => $('#openRates').click() }, 'Set your rates'));
+  }
+  function renderAll() { renderBanner(); renderBrief(); renderFinishes(); renderLandscape(); renderEnergy(); renderQuote(); renderPicker(); if (activePanel === 'summary') renderSummary(); }
+
+  window.addEventListener('resize', () => { if (activePanel === 'energy') drawEnergyChart(energy()); });
+  try { const p = localStorage.getItem('p2h-step'); if (p && document.getElementById('p-' + p)) show(p); } catch {}
+  renderAll();
+
+  // ---------- local storage (standalone edition) ----------
+  const LS_KEY = 'p2h-lagos-store-v1';
+  const readStore = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || { rates: null, sessions: {} }; } catch { return { rates: null, sessions: {} }; } };
+  const writeStore = (s) => { localStorage.setItem(LS_KEY, JSON.stringify(s)); };
+  const listeners = { rates: [], sessions: [] };
+  const emit = () => { const s = readStore(); listeners.rates.forEach((f) => f(s)); listeners.sessions.forEach((f) => f(s)); };
+  const snapDoc = (d) => ({ exists: !!d, data: () => d });
+  const localDb = {
+    doc(path) {
+      if (path === 'settings/rates') return {
+        onSnapshot(fn) { const f = (s) => fn(snapDoc(s.rates)); listeners.rates.push(f); f(readStore()); },
+        async set(v) { const s = readStore(); s.rates = v; writeStore(s); emit(); },
+      };
+      const id = path.split('/')[1];
+      return { async set(v) { const s = readStore(); s.sessions[id] = v; writeStore(s); emit(); } };
+    },
+    collection() {
+      const q = { orderBy() { return q; }, limit() { return q; },
+        onSnapshot(fn) { const f = (s) => fn({ docs: Object.entries(s.sessions).sort((a, b) => String(b[1].updated).localeCompare(String(a[1].updated))).map(([id, d]) => ({ id, data: () => d })) }); listeners.sessions.push(f); f(readStore()); } };
+      return q;
+    },
+  };
+  const saveFile = (filename, data, type) => {
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    const a = document.createElement('a'); a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  downloads = { async save({ filename, data }) { saveFile(filename, data, 'text/html'); return { status: 'saved' }; } };
+  $('#backupBtn').addEventListener('click', () => {
+    saveFile('plot-to-home-lagos-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(readStore(), null, 1), 'application/json');
+    status('Backup saved');
+  });
+  $('#restoreIn').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const incoming = JSON.parse(await f.text());
+      const s = readStore();
+      if (incoming.rates) s.rates = incoming.rates;
+      Object.assign(s.sessions, incoming.sessions || {});
+      writeStore(s); emit(); status('Restored ' + Object.keys(incoming.sessions || {}).length + ' sessions');
+    } catch { status('That file isn’t a Plot-to-Home backup.'); }
+    e.target.value = '';
+  });
+  try { localStorage.setItem('p2h-probe', '1'); localStorage.removeItem('p2h-probe'); db = localDb; } catch { db = null; }
+  if (!db) { status('This browser blocks saving; use Back up before closing.'); }
+  else {
+    db.doc('settings/rates').onSnapshot((snap) => {
+      const d = snap.exists ? snap.data() : null;
+      ratesExample = !d || d.examples !== false || !d.values; rates = ratesExample ? { ...EXAMPLE_RATES } : { ...d.values };
+      renderAll();
+    });
+    db.collection('sessions').orderBy('updated', 'desc').limit(200).onSnapshot((snap) => {
+      sessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderPicker();
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

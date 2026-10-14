@@ -1,4 +1,13 @@
-# Abuja Estate Land Scan
+# Estate Land Scan — Abuja and Lagos + Ogun
+
+| Region | Dashboard | Studio |
+|---|---|---|
+| Abuja (FCT + Nasarawa border) | [`/`](./) | [`studio.html`](studio.html) |
+| Lagos + Ogun commuter belt | [`/lagos/`](lagos/) | [`lagos/studio.html`](lagos/studio.html) |
+
+The sections below describe the Abuja edition. The Lagos + Ogun edition works the same way, with two differences: every estate gets two scores (**build in 1–3 years** and **hold 5+ years**, which swaps infrastructure and commute for growth catalysts), and drive times are measured to the nearest of Ikeja, Victoria Island/Lekki Phase 1 or the Lekki Free Trade Zone. Its method is explained at the bottom of the page.
+
+## Abuja edition
 
 Two static web tools. They need no build step and no server code.
 
