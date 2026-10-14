@@ -7,6 +7,8 @@
 
 The sections below describe the Abuja edition. The Lagos + Ogun edition works the same way, with two differences: every estate gets two scores (**build in 1–3 years** and **hold 5+ years**, which swaps infrastructure and commute for growth catalysts), and drive times are measured to the nearest of Ikeja, Victoria Island/Lekki Phase 1 or the Lekki Free Trade Zone. Its method is explained at the bottom of the page.
 
+The Abuja pages stay at the root (`index.html`, `studio.html`). Each dashboard and studio has a switcher to the other edition, and the footers link both land scans and both studios. The shared privacy notice is still `privacy.html`.
+
 ## Abuja edition
 
 Two static web tools. They need no build step and no server code.
@@ -55,7 +57,7 @@ A value still containing `YOUR_` is treated as unset.
 
 ### Formspree
 
-`FORM_ENDPOINT` is `https://formspree.io/f/mvkzbdqq`. Leave `WEB3FORMS_ACCESS_KEY` as the placeholder. The form posts JSON (`Accept: application/json`) with `name`, `phone`, `email`, `estate`, `budget`, `buyer_type` and `consent`. The form id is visible in the page source; that is normal for a static site. In the Formspree dashboard, allow AJAX submissions and restrict the form to your GitHub Pages domain if that setting is available.
+`FORM_ENDPOINT` is `https://formspree.io/f/mvkzbdqq`. Leave `WEB3FORMS_ACCESS_KEY` as the placeholder. The form posts JSON (`Accept: application/json`) with `name`, `phone`, `email`, `estate`, `city`, `budget`, `buyer_type` and `consent`. `city` is `Abuja` or `Lagos-Ogun`, taken from the page, not typed by the visitor. `estate` is the estate on screen when one is selected, or the estate the visitor types. The email subject includes the city and the estate. The form id is visible in the page source; that is normal for a static site. In the Formspree dashboard, allow AJAX submissions and restrict the form to your GitHub Pages domain if that setting is available.
 
 ### Web3Forms
 
