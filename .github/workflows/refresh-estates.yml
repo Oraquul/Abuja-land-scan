@@ -1,0 +1,60 @@
+# Re-read the listing page already cited on each estate.
+# The schedule runs only after this file is on the default branch.
+# Nigeria Property Centre blocks a plain request. Set the repository secret
+# LISTING_PROXY_URL to a URL containing the placeholder {url}.
+# The push needs Settings → Actions → General → Workflow permissions
+# set to Read and write permissions.
+
+name: Refresh estate listings
+
+on:
+  schedule:
+    - cron: "15 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-estates
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Re-read cited listing pages
+        id: refresh
+        env:
+          LISTING_PROXY_URL: ${{ secrets.LISTING_PROXY_URL }}
+        run: python scripts/refresh_estates.py --write
+        continue-on-error: true
+
+      - name: Commit listing updates
+        if: always()
+        run: |
+          git add -- estates.csv lagos/estates.csv
+          if git diff --cached --quiet; then
+            echo "No cited listing field changed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh estate asking prices from cited listings."
+          if ! git push; then
+            echo "The job could not push estates.csv."
+            echo "Open Settings, then Actions, then General, then Workflow permissions, and choose Read and write permissions."
+            exit 1
+          fi
+
+      - name: Fail when a cited source could not be read
+        if: steps.refresh.outcome == 'failure'
+        run: exit 1

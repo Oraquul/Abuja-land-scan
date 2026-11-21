@@ -109,4 +109,16 @@ assert.strictEqual(site.publicSourceUrl("https://www.linkedin.com/pub/someone"),
 assert.strictEqual(site.publicSourceUrl("https://facebook.com/profile.php?id=1"), "");
 assert.strictEqual(site.publicSourceUrl("javascript:alert(1)"), "");
 
+assert.strictEqual(site.titleLabel(""), "Title not stated");
+assert.strictEqual(site.titleLabel("   "), "Title not stated");
+assert.strictEqual(site.titleLabel("Not stated"), "Title not stated");
+assert.strictEqual(site.titleLabel("none stated"), "Title not stated");
+assert.strictEqual(site.titleLabel("N/A"), "Title not stated");
+assert.strictEqual(site.titleLabel("C of O (issuer not stated)"), "C of O (issuer not stated)");
+assert.strictEqual(site.titleLabel("FCDA C of O"), "FCDA C of O");
+assert.strictEqual(
+  site.titleNote,
+  "Titles are not verified with AGIS or NAGIS. Buyers should verify the title before paying."
+);
+
 console.log("site-widgets tests passed");

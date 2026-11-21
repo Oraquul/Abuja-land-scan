@@ -18,9 +18,13 @@ Two static web tools. They need no build step and no server code.
 
 ## Data
 
-`estates.csv` is the master data. The dashboard reads it every time it loads, together with `map_layers.min.json` (roads, the border line and place labels) and `area_market.min.json` (area asking-price benchmarks).
+`estates.csv` is the master data for Abuja. `lagos/estates.csv` is the master data for Lagos and Ogun. Each dashboard reads its own file every time it loads, together with that edition's `map_layers.min.json` (roads, the border line and place labels) and `area_market.min.json` (area asking-price benchmarks).
 
-This file is updated by a weekly sync. Please don't edit it here, or the next sync will overwrite your change. Send corrections to the maintainer instead.
+`.github/workflows/refresh-estates.yml` re-reads the page already cited in `source_url`. It runs at 06:15 UTC every Monday, and it can be started by hand from the Actions tab. A row changes only when that page states a price for the reference plot size, or a newer date for that same price. The workflow does not add estates and it does not fill in a title. Please don't edit the price, date, or stale columns by hand, or the next sync will overwrite your change. Send corrections to the maintainer instead.
+
+Nigeria Property Centre is the cited source for most rows, and it answers this job with a Cloudflare security check. The job then fails and leaves those rows unchanged. To let it read those pages, add a repository secret named `LISTING_PROXY_URL`. The value is a URL that returns the listing HTML and contains the placeholder `{url}`, for example `https://api.zenrows.com/v1/?apikey=YOUR_KEY&url={url}`. Keep the key in that secret. Do not commit it.
+
+The job commits real updates with the Actions token. The push needs write access: in the repository settings, open Actions, then General, then Workflow permissions, and choose Read and write permissions. The Monday schedule starts only after this workflow file is on the default branch.
 
 ## Scoring
 
