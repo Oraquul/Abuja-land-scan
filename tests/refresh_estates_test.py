@@ -23,6 +23,46 @@ def card(name, sqm, price, when):
     """
 
 
+class ProxyUrlTests(unittest.TestCase):
+    def test_scraperapi_renders_and_encodes_once(self):
+        built = refresh.build_proxy_url(
+            "https://api.scraperapi.com/?api_key=EXAMPLE&url={url}",
+            "https://nigeriapropertycentre.com/for-sale/land/abuja/lugbe-district/showtype",
+        )
+        self.assertIn("api_key=EXAMPLE", built)
+        self.assertIn("&render=true&url=", built)
+        self.assertIn("url=https%3A%2F%2Fnigeriapropertycentre.com%2F", built)
+        self.assertNotIn("{url}", built)
+        self.assertNotIn("%253A", built)
+        self.assertLess(built.index("render=true"), built.index("url=https%3A"))
+
+    def test_existing_render_flag_is_kept(self):
+        built = refresh.build_proxy_url(
+            "https://api.scraperapi.com/?api_key=EXAMPLE&render=false&url={url}",
+            "https://example.com/a",
+        )
+        self.assertEqual(built.count("render="), 1)
+        self.assertIn("render=false", built)
+
+    def test_other_proxies_are_only_encoded(self):
+        built = refresh.build_proxy_url(
+            "https://proxy.example/fetch?url={url}",
+            "https://example.com/a b",
+        )
+        self.assertEqual(
+            built,
+            "https://proxy.example/fetch?url=https%3A%2F%2Fexample.com%2Fa%20b",
+        )
+        self.assertNotIn("render=", built)
+
+    def test_error_text_drops_urls_and_keys(self):
+        cleaned = refresh.sanitize_error(
+            "failed https://api.scraperapi.com/?api_key=SECRET&url=https%3A%2F%2Fexample.com"
+        )
+        self.assertNotIn("SECRET", cleaned)
+        self.assertNotIn("http", cleaned)
+
+
 class ObserveTests(unittest.TestCase):
     def test_card_updates_matching_plot(self):
         html = card("Mshel Pent Haven", 150, 5000000, "02 Nov 2026")
