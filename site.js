@@ -126,6 +126,15 @@
     return "https://wa.me/" + n + "?text=" + encodeURIComponent(text);
   }
 
+  var TITLE_NOTE = "Titles are not verified with AGIS or NAGIS. Buyers should verify the title before paying.";
+  var UNSTATED_TITLE = /^(not stated|none stated|none|n\/a|na|unspecified|unknown)$/i;
+
+  function titleLabel(value) {
+    var s = String(value == null ? "" : value).trim();
+    if (!s || UNSTATED_TITLE.test(s)) return "Title not stated";
+    return s;
+  }
+
   function publicSourceUrl(url) {
     var raw = String(url == null ? "" : url).trim();
     if (!raw) return "";
@@ -190,6 +199,8 @@
     safeEstate: safeEstate,
     editionCity: editionCity,
     buildPayload: buildPayload,
+    titleLabel: titleLabel,
+    titleNote: TITLE_NOTE,
     allowedBudget: allowedBudget,
     allowedBuyer: allowedBuyer,
     digits: digits,
@@ -584,6 +595,8 @@
   root.siteTrack = track;
   root.siteSetEstate = setEstate;
   root.sitePublicSourceUrl = publicSourceUrl;
+  root.siteTitleLabel = titleLabel;
+  root.siteTitleNote = TITLE_NOTE;
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

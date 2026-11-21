@@ -170,6 +170,8 @@ window.dash = (() => {
 .ae .track{height:8px;border-radius:4px;background:var(--cds-chart-grid);overflow:hidden}
 .ae .fill{height:100%;border-radius:4px}
 .ae .flag{margin-top:var(--cds-gap-sm);font-size:var(--cds-font-size-caption);color:var(--color-warn)}
+.ae .title-blank{font-weight:600;color:var(--color-warn)}
+.ae .title-verify{margin:8px 0;padding:8px 10px;border:1px solid var(--color-warn);border-radius:var(--cds-radius);background:var(--color-bg);color:var(--color-fg);font-size:var(--cds-font-size-body);line-height:1.45}
 .ae .det a{font-size:var(--cds-font-size-caption);color:var(--color-fg)}
 .ae .tblwrap{max-height:520px;overflow:auto}
 .ae table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption);font-variant-numeric:tabular-nums}
@@ -385,6 +387,13 @@ window.dash = (() => {
   try { const m = localStorage.getItem('lagosScanMode'); if (m === 'hold' || m === 'build') st.mode = m; } catch (e) {}
   const $ = (s) => document.querySelector('.ae ' + s);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const TITLE_NOTE = 'Titles are not verified with AGIS or NAGIS. Buyers should verify the title before paying.';
+  const shownTitle = (value) => {
+    if (typeof window.siteTitleLabel === 'function') return window.siteTitleLabel(value);
+    const s = String(value == null ? '' : value).trim();
+    if (!s || /^(not stated|none stated|none|n\/a|na|unspecified|unknown)$/i.test(s)) return 'Title not stated';
+    return s;
+  };
   let raw = [], rows = [], byId = {}, est = {};
   const view = () => { rows = raw.map((r) => ({ ...r, score: st.mode === 'build' ? r.build_score : r.hold_score, grade: st.mode === 'build' ? r.build_grade : r.hold_grade, other: st.mode === 'build' ? r.hold_score : r.build_score })); byId = Object.fromEntries(rows.map((r) => [r.id, r])); };
   const modeLabel = () => st.mode === 'build' ? 'Build' : 'Hold';
@@ -514,13 +523,23 @@ window.dash = (() => {
     big.append(sc, r.score == null ? '' : el('span', 'note', '/ 100'), b);
     if (r.score != null) big.append(el('span', 'other', `${st.mode === 'build' ? 'Hold' : 'Build'} score ${r.other} (${st.mode === 'build' ? r.hold_grade : r.build_grade})`));
     det.append(big);
+    const titleText = shownTitle(r.title);
+    const titleList = el('dl', 'facts');
+    const titleDd = el('dd', titleText === 'Title not stated' ? 'title-blank' : '', titleText);
+    titleDd.setAttribute('data-source', 'estates');
+    titleDd.setAttribute('data-field', 'title');
+    titleDd.setAttribute('data-where', 'id=' + encodeURIComponent(r.id));
+    titleList.append(el('dt', null, 'Title claimed'), titleDd);
+    det.append(titleList);
+    const verify = el('p', 'title-verify', window.siteTitleNote || TITLE_NOTE);
+    verify.setAttribute('role', 'note');
+    det.append(verify);
     const dl = el('dl', 'facts');
     const add = (k, v, src, field) => { const dd = el('dd', null, v); if (src) { dd.setAttribute('data-source', src); dd.setAttribute('data-field', field); dd.setAttribute('data-where', 'id=' + encodeURIComponent(r.id)); } dl.append(el('dt', null, k), dd); };
     add('Reference plot', r.ref_sqm ? r.ref_sqm + ' sqm for ' + fmtN(r.ref_price) : '—');
     add('Price per sqm', fmtS(r.price_per_sqm), 'scored', 'price_per_sqm');
     add('Price tier', r.tier, 'scored', 'tier');
     add('Plot prices', e.plot_prices, 'estates', 'plot_prices');
-    add('Title claimed', r.title, 'estates', 'title');
     if (e.infra_note) add('On the ground', e.infra_note, 'estates', 'infra_note');
     add('Nearest job hub', `~${e.drive_min} min off-peak to ${e.hub}`);
     add('Growth outlook', e.growth_note, 'estates', 'growth_note');
@@ -627,7 +646,7 @@ window.dash = (() => {
       const tr = el('tr', r.id === st.sel ? 'sel' : ''); tr.dataset.key = r.id;
       const gtd = el('td'); const b = el('span', 'badge', r.grade === 'Not rated' ? '—' : r.grade); b.style.background = GC[r.grade]; gtd.append(b);
       tr.append(el('td', null, r.name), el('td', 'hide-n', r.corridor), el('td', 'hide-n', r.state), el('td', 'hide-n', r.tier), el('td', 'num hide-n', r.ref_sqm ? r.ref_sqm + ' sqm' : '—'),
-        el('td', 'num', fmtN(r.ref_price)), el('td', 'num', fmtS(r.price_per_sqm)), el('td', 'hide-n', r.title), el('td', 'num', r.score == null ? '—' : String(r.score)), el('td', 'num hide-n', r.other == null ? '—' : String(r.other)), gtd);
+        el('td', 'num', fmtN(r.ref_price)), el('td', 'num', fmtS(r.price_per_sqm)), el('td', shownTitle(r.title) === 'Title not stated' ? 'hide-n title-blank' : 'hide-n', shownTitle(r.title)), el('td', 'num', r.score == null ? '—' : String(r.score)), el('td', 'num hide-n', r.other == null ? '—' : String(r.other)), gtd);
       return tr;
     }));
   }
