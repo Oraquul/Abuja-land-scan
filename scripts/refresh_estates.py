@@ -32,6 +32,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = (ROOT / "estates.csv", ROOT / "lagos" / "estates.csv")
 USER_AGENT = "EstateLandScan/1.0 (+https://github.com/Oraquul/Abuja-land-scan)"
 STALE_DAYS = 274
+DIRECT_TIMEOUT = 25
+PROXY_TIMEOUT = 90
 PRIMARY_HOST = "nigeriapropertycentre.com"
 SKIP_HOSTS = ("linkedin.com",)
 PRICE_FIELDS = ("ref_price", "price_per_sqm", "source_date", "price_stale")
@@ -96,6 +98,7 @@ class Report:
     blocked_primary: int = 0
     skipped_profiles: int = 0
     unreadable: int = 0
+    proxy_calls: int = 0
     lines: list[str] = field(default_factory=list)
 
 
@@ -362,7 +365,42 @@ def dump_rows(fields: list[str], rows: list[dict[str, str]], newline: str) -> by
     return buffer.getvalue().encode("utf-8")
 
 
-def default_fetch(url: str, timeout: int = 25) -> Fetch:
+def build_proxy_url(template: str, target: str) -> str:
+    """Fill {url} with an encoded target address.
+
+    The target is encoded once. urllib leaves that encoding in place.
+    ScraperAPI has to run the page's JavaScript to get past a Cloudflare
+    check, so a ScraperAPI template gains render=true before the url
+    parameter when the secret does not already set it.
+    """
+    if "{url}" not in template:
+        raise ValueError("LISTING_PROXY_URL is missing the {url} placeholder")
+    probe = urlparse(template.replace("{url}", "https://example.com/"))
+    host = (probe.hostname or "").lower().removeprefix("www.")
+    prepared = template
+    head = template.split("{url}", 1)[0]
+    if host.endswith("scraperapi.com") and not re.search(r"(?:^|[?&])render=", head):
+        if "&url={url}" in prepared:
+            prepared = prepared.replace("&url={url}", "&render=true&url={url}", 1)
+        elif "?url={url}" in prepared:
+            prepared = prepared.replace("?url={url}", "?render=true&url={url}", 1)
+    return prepared.replace("{url}", quote(target, safe=""))
+
+
+def sanitize_error(text: str) -> str:
+    text = re.sub(r"https?://\S+", "[url]", text)
+    text = re.sub(r"(api[_-]?key=)[^&\s]+", r"\1[redacted]", text, flags=re.I)
+    return text[:180]
+
+
+def call_fetch(fetch, url: str, timeout: int) -> Fetch:
+    try:
+        return fetch(url, timeout=timeout)
+    except TypeError:
+        return fetch(url)
+
+
+def default_fetch(url: str, timeout: int = DIRECT_TIMEOUT) -> Fetch:
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "text/html"})
     try:
         with urlopen(request, timeout=timeout) as response:
@@ -378,10 +416,13 @@ def default_fetch(url: str, timeout: int = 25) -> Fetch:
 
 
 def through_proxy(template: str, url: str, fetch) -> Fetch:
-    if "{url}" not in template:
-        return Fetch(url, 0, "", error="LISTING_PROXY_URL is missing the {url} placeholder")
-    proxied = template.replace("{url}", quote(url, safe=""))
-    result = fetch(proxied)
+    try:
+        proxied = build_proxy_url(template, url)
+    except ValueError as exc:
+        return Fetch(url, 0, "", error=str(exc))
+    result = call_fetch(fetch, proxied, PROXY_TIMEOUT)
+    if result.error:
+        result.error = sanitize_error(result.error)
     result.url = url
     result.via_proxy = True
     return result
@@ -404,9 +445,14 @@ def refresh(today: date | None = None, fetcher=None, proxy: str | None = None, w
             result = Fetch(url, 0, "", error="personal profile skipped")
             cache[url] = result
             return result
-        result = fetcher(url)
+        result = call_fetch(fetcher, url, DIRECT_TIMEOUT)
         if result.blocked and proxy:
             result = through_proxy(proxy, url, fetcher)
+            report.proxy_calls += 1
+            report.lines.append(
+                f"proxy {host_of(url)} status={result.status} "
+                f"challenge={str(result.blocked).lower()}"
+            )
         cache[url] = result
         if pause and fetcher is default_fetch:
             time.sleep(pause)
@@ -469,15 +515,21 @@ def main(argv: list[str]) -> int:
     print(f"Blocked {report.blocked_rows}, of which {report.blocked_primary} cite {PRIMARY_HOST}.")
     print(f"Personal-profile sources skipped: {report.skipped_profiles}.")
     print(f"Other unreadable pages: {report.unreadable}.")
+    print(f"Proxy requests: {report.proxy_calls}.")
     for line in report.lines:
         print(line)
+    if report.blocked_primary and report.proxy_calls:
+        print(
+            "The listing proxy was used. Nigeria Property Centre still did not "
+            "return the listing HTML, so those rows were left unchanged."
+        )
+        return 2
     if report.blocked_primary:
         print(
             "Nigeria Property Centre did not return the listing HTML. "
             "The weekly job leaves those rows unchanged. "
             "Add a repository secret named LISTING_PROXY_URL. "
-            "Its value is a URL that returns the listing page and contains the placeholder {url}, "
-            "for example https://api.zenrows.com/v1/?apikey=YOUR_KEY&url={url}. "
+            "Its value is a URL that returns the listing HTML and contains the placeholder {url}. "
             "Do not commit the key."
         )
         return 2
